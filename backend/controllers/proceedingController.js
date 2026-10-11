@@ -764,6 +764,16 @@ const createProceeding = async (req, res) => {
         if (!students || students.length === 0) {
             return res.status(400).json({ message: 'Please select at least one student' });
         }
+        if (Number(req.body.unmappedStudentsCount) > 0) {
+            return res.status(400).json({
+                message: `Strict validation failed: All students from the uploaded file must be mapped before creating a proceeding. (${req.body.unmappedStudentsCount} student(s) unmapped)`
+            });
+        }
+        if (req.body.expectedStudentCount && Number(req.body.expectedStudentCount) > students.length) {
+            return res.status(400).json({
+                message: `Strict validation failed: Expected ${req.body.expectedStudentCount} mapped students from uploaded file, but only ${students.length} are mapped.`
+            });
+        }
         const missingShare = students.find(s => !(Number(s.shareAmount) > 0));
         if (missingShare) {
             return res.status(400).json({ message: 'Please enter a share amount for every selected student' });
@@ -1022,6 +1032,16 @@ const updateProceeding = async (req, res) => {
         }
 
         if (students && Array.isArray(students)) {
+            if (Number(req.body.unmappedStudentsCount) > 0) {
+                return res.status(400).json({
+                    message: `Strict validation failed: All students from the uploaded file must be mapped before updating a proceeding. (${req.body.unmappedStudentsCount} student(s) unmapped)`
+                });
+            }
+            if (req.body.expectedStudentCount && Number(req.body.expectedStudentCount) > students.length) {
+                return res.status(400).json({
+                    message: `Strict validation failed: Expected ${req.body.expectedStudentCount} mapped students from uploaded file, but only ${students.length} are mapped.`
+                });
+            }
             const missingShare = students.find(s => !(Number(s.shareAmount) > 0));
             if (missingShare) {
                 return res.status(400).json({ message: 'Please enter a share amount for every selected student' });

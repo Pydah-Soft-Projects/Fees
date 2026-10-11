@@ -969,23 +969,26 @@ const showExcelImportResultDialog = (summary, hasStudents, autoLocked) => {
     if (!summary) return;
 
     const issueLines = [];
-    if (summary.notFound.length > 0) issueLines.push(`${summary.notFound.length} application ID(s) could not be loaded`);
-    if (summary.missingShareInExcel.length > 0) issueLines.push(`${summary.missingShareInExcel.length} Excel row(s) have no share amount`);
+    if (summary.notFound.length > 0) issueLines.push(`${summary.notFound.length} application ID(s) could not be mapped`);
+    if (summary.missingShareInExcel.length > 0) issueLines.push(`${summary.missingShareInExcel.length} file row(s) have no share amount`);
     if (summary.studentsMissingShare.length > 0) issueLines.push(`${summary.studentsMissingShare.length} loaded student(s) need share amounts`);
 
     if (!hasStudents) {
         let html = `<div style="text-align:left;font-size:13px;line-height:1.5">`;
-        html += `<p>No students matched the Excel Student ID / Application ID values.</p>`;
+        html += `<div style="background-color:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:12px;border-radius:10px;margin-bottom:12px;font-weight:600;">`;
+        html += `Strict Validation Failed: No students from the uploaded file could be mapped in the system.`;
+        html += `<div style="font-weight:400;font-size:12px;margin-top:4px;color:#b91c1c;">All students from the file must be mapped to create a proceeding.</div>`;
+        html += `</div>`;
         if (summary.notFound.length > 0) {
-            html += `<p style="margin-top:10px;font-weight:600;color:#b45309">Application IDs not loaded:</p><ul style="max-height:160px;overflow:auto;margin:6px 0 0;padding-left:18px;font-size:12px">`;
+            html += `<p style="margin-top:10px;font-weight:600;color:#991b1b">Application IDs not mapped (${summary.notFound.length}):</p><ul style="max-height:160px;overflow:auto;margin:6px 0 0;padding-left:18px;font-size:12px">`;
             summary.notFound.slice(0, 40).forEach(n => {
-                html += `<li style="margin-bottom:4px"><code>${escapeHtml(n.applicationId)}</code>${n.message ? `<br><span style="color:#64748b">${escapeHtml(n.message)}</span>` : ''}</li>`;
+                html += `<li style="margin-bottom:4px"><code style="background:#fee2e2;padding:2px 4px;border-radius:4px;color:#991b1b;font-weight:600;">${escapeHtml(n.applicationId)}</code>${n.message ? `<br><span style="color:#64748b">${escapeHtml(n.message)}</span>` : ''}</li>`;
             });
             if (summary.notFound.length > 40) html += `<li>…and ${summary.notFound.length - 40} more</li>`;
             html += `</ul>`;
         }
-        html += `<p style="margin-top:10px;color:#64748b;font-size:12px">Verify Student ID / Application ID values in the Excel file.</p></div>`;
-        Swal.fire({ icon: 'warning', title: 'No students loaded', html, width: 620, confirmButtonText: 'OK' });
+        html += `<p style="margin-top:10px;color:#64748b;font-size:12px">Verify Student ID / Application ID values in the file and check student records.</p></div>`;
+        Swal.fire({ icon: 'error', title: 'No students loaded (Creation Blocked)', html, width: 620, confirmButtonText: 'OK', confirmButtonColor: '#dc2626' });
         return;
     }
 
@@ -996,13 +999,48 @@ const showExcelImportResultDialog = (summary, hasStudents, autoLocked) => {
     else if (summary.batches?.length === 1) scopeParts.push(`Batch ${summary.batches[0]}`);
     const scopeText = scopeParts.length ? ` · ${scopeParts.join(' · ')}` : '';
 
+    if (summary.notFound.length > 0) {
+        let html = `<div style="text-align:left;font-size:13px;line-height:1.5">`;
+        html += `<div style="background-color:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:12px;border-radius:10px;margin-bottom:12px;font-weight:600;">`;
+        html += `Strict Validation: Only <strong>${summary.matchedStudents}</strong> of <strong>${summary.requested}</strong> students mapped.`;
+        html += `<div style="font-weight:400;font-size:12px;margin-top:4px;color:#b91c1c;">Proceeding creation is blocked until all <strong>${summary.requested}</strong> students from the uploaded file are mapped in the system.</div>`;
+        html += `</div>`;
+
+        html += `<p style="font-weight:600;color:#991b1b;margin-bottom:4px;">Unmapped Student IDs (${summary.notFound.length}):</p>`;
+        html += `<ul style="max-height:140px;overflow:auto;margin:4px 0 0;padding-left:18px;font-size:12px">`;
+        summary.notFound.slice(0, 30).forEach(n => {
+            html += `<li style="margin-bottom:4px"><code style="background:#fee2e2;padding:2px 4px;border-radius:4px;color:#991b1b;font-weight:600;">${escapeHtml(n.applicationId)}</code>${n.message ? ` — <span style="color:#64748b">${escapeHtml(n.message)}</span>` : ''}</li>`;
+        });
+        if (summary.notFound.length > 30) html += `<li>…and ${summary.notFound.length - 30} more</li>`;
+        html += `</ul>`;
+
+        if (summary.missingShareInExcel.length > 0) {
+            html += `<p style="margin-top:10px;font-weight:600;color:#b45309">File rows missing share amount: ${summary.missingShareInExcel.length}</p>`;
+        }
+        if (summary.studentsMissingShare.length > 0) {
+            html += `<p style="margin-top:6px;font-weight:600;color:#b45309">Loaded students needing share amounts: ${summary.studentsMissingShare.length}</p>`;
+        }
+
+        html += `<p style="margin-top:10px;color:#64748b;font-size:12px">Review the summary panel below for full details. Resolve the missing students in the system before proceeding.</p></div>`;
+
+        Swal.fire({
+            icon: 'error',
+            title: 'Strict Validation: Incomplete Student Mapping',
+            html,
+            width: 620,
+            confirmButtonText: 'I Understand',
+            confirmButtonColor: '#dc2626'
+        });
+        return;
+    }
+
     if (!summary.hasIssues) {
         Swal.fire({
             icon: 'success',
-            title: 'Excel loaded',
+            title: 'File loaded & all mapped',
             text: autoLocked
-                ? `All ${summary.matchedStudents} student(s) loaded with share amounts${scopeText}. Selection locked — review and submit.`
-                : `All ${summary.matchedStudents} student(s) loaded and selected${scopeText}.`,
+                ? `All ${summary.matchedStudents} student(s) successfully mapped with share amounts${scopeText}. Selection locked — review and submit.`
+                : `All ${summary.matchedStudents} student(s) successfully mapped${scopeText}.`,
             timer: autoLocked ? 3500 : 2500,
             showConfirmButton: !autoLocked,
         });
@@ -1010,20 +1048,11 @@ const showExcelImportResultDialog = (summary, hasStudents, autoLocked) => {
     }
 
     let html = `<div style="text-align:left;font-size:13px;line-height:1.5">`;
-    html += `<p><b>${summary.matchedStudents}</b> of <b>${summary.requested}</b> Student ID(s) loaded as students${scopeText ? ` (${escapeHtml(scopeParts.join(', '))})` : ''}.</p>`;
+    html += `<p>All <b>${summary.matchedStudents}</b> of <b>${summary.requested}</b> Student ID(s) mapped as students${scopeText ? ` (${escapeHtml(scopeParts.join(', '))})` : ''}.</p>`;
     html += `<p style="color:#b45309;margin-top:6px">${issueLines.join(' · ')}</p>`;
 
-    if (summary.notFound.length > 0) {
-        html += `<p style="margin-top:10px;font-weight:600">Not loaded:</p><ul style="max-height:100px;overflow:auto;margin:4px 0 0;padding-left:18px;font-size:12px">`;
-        summary.notFound.slice(0, 25).forEach(n => {
-            html += `<li style="margin-bottom:4px"><code>${escapeHtml(n.applicationId)}</code>${n.message ? ` — ${escapeHtml(n.message)}` : ''}</li>`;
-        });
-        if (summary.notFound.length > 25) html += `<li>…and ${summary.notFound.length - 25} more</li>`;
-        html += `</ul>`;
-    }
-
     if (summary.missingShareInExcel.length > 0) {
-        html += `<p style="margin-top:10px;font-weight:600">Excel rows missing share amount:</p><p style="font-size:12px;color:#64748b">${summary.missingShareInExcel.slice(0, 15).map(escapeHtml).join(', ')}${summary.missingShareInExcel.length > 15 ? ` …+${summary.missingShareInExcel.length - 15} more` : ''}</p>`;
+        html += `<p style="margin-top:10px;font-weight:600">File rows missing share amount:</p><p style="font-size:12px;color:#64748b">${summary.missingShareInExcel.slice(0, 15).map(escapeHtml).join(', ')}${summary.missingShareInExcel.length > 15 ? ` …+${summary.missingShareInExcel.length - 15} more` : ''}</p>`;
     }
 
     if (summary.studentsMissingShare.length > 0) {
@@ -1039,7 +1068,7 @@ const showExcelImportResultDialog = (summary, hasStudents, autoLocked) => {
 
     Swal.fire({
         icon: 'warning',
-        title: 'Loaded with issues',
+        title: 'Loaded with share issues',
         html,
         width: 620,
         confirmButtonText: 'OK',
@@ -1476,6 +1505,7 @@ const Proceedings = () => {
                     studentsLocked,
                     studentSearch,
                     studentQuotaFilter,
+                    excelImportSummary,
                     savedAt: Date.now()
                 };
                 localStorage.setItem(getProceedingDraftKey(user?.username), JSON.stringify(payload));
@@ -1488,7 +1518,7 @@ const Proceedings = () => {
         return () => clearTimeout(timer);
     }, [
         activeTab, isEditing, formData, loadedStudents, studentChecks,
-        studentShareAmounts, studentsLocked, studentSearch, studentQuotaFilter, user?.username
+        studentShareAmounts, studentsLocked, studentSearch, studentQuotaFilter, excelImportSummary, user?.username
     ]);
 
     const clearCreateDraft = () => {
@@ -1514,6 +1544,7 @@ const Proceedings = () => {
         setStudentsLocked(!!draft.studentsLocked);
         setStudentSearch(draft.studentSearch || '');
         setStudentQuotaFilter(draft.studentQuotaFilter || 'All');
+        setExcelImportSummary(draft.excelImportSummary || null);
         setDraftAvailable(true);
         setDraftSavedAt(draft.savedAt || null);
         Swal.fire({
@@ -1745,8 +1776,9 @@ const Proceedings = () => {
 
                 if (sharesApplied > 0) {
                     setStudentShareAmounts(shares);
+                    const hasUnmapped = Boolean(importSummary?.notFound?.length > 0);
                     const allHaveShares = students.length > 0 && students.every(s => Number(shares[s.studentId]) > 0);
-                    if (allHaveShares && formData.academicYear) {
+                    if (!hasUnmapped && allHaveShares && formData.academicYear) {
                         let shareTotal = 0;
                         for (const v of Object.values(shares)) shareTotal += Number(v) || 0;
                         if (!(Number(formData.amount) > 0) && shareTotal > 0) {
@@ -1873,21 +1905,45 @@ const Proceedings = () => {
     const renderExcelImportSummaryPanel = () => {
         if (!excelImportSummary) return null;
         const s = excelImportSummary;
-        const allOk = !s.hasIssues && s.matchedStudents > 0;
+        const hasUnmapped = s.notFound.length > 0;
+        const allOk = !s.hasIssues && s.matchedStudents > 0 && !hasUnmapped;
+
+        let panelBorderBg = 'border-amber-200 bg-amber-50';
+        if (hasUnmapped) {
+            panelBorderBg = 'border-rose-300 bg-rose-50';
+        } else if (allOk) {
+            panelBorderBg = 'border-emerald-200 bg-emerald-50';
+        }
 
         return (
-            <div className={`mb-4 rounded-xl border overflow-hidden ${allOk ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+            <div className={`mb-4 rounded-xl border overflow-hidden ${panelBorderBg}`}>
                 <div className="px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
                     <div className="min-w-0 flex-1">
-                        <div className={`text-xs font-bold uppercase tracking-wide ${allOk ? 'text-emerald-800' : 'text-amber-900'}`}>
-                            File import summary
+                        <div className={`text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 ${hasUnmapped ? 'text-rose-800' : allOk ? 'text-emerald-800' : 'text-amber-900'}`}>
+                            {hasUnmapped ? (
+                                <>
+                                    <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+                                    <span>Strict Validation: Creation Blocked</span>
+                                </>
+                            ) : (
+                                'File import summary'
+                            )}
                         </div>
-                        <div className={`text-sm font-semibold mt-1 ${allOk ? 'text-emerald-900' : 'text-amber-950'}`}>
-                            {s.matchedStudents} of {s.requested} Student ID(s) loaded
+                        <div className={`text-sm font-semibold mt-1 ${hasUnmapped ? 'text-rose-950 font-bold' : allOk ? 'text-emerald-900' : 'text-amber-950'}`}>
+                            {hasUnmapped ? (
+                                `Incomplete mapping: ${s.matchedStudents} of ${s.requested} Student ID(s) mapped (${s.notFound.length} unmapped)`
+                            ) : (
+                                `${s.matchedStudents} of ${s.requested} Student ID(s) loaded`
+                            )}
                             {s.autoLocked ? ' · Selection locked with shares' : ''}
                         </div>
+                        {hasUnmapped && (
+                            <div className="text-xs text-rose-800 font-medium mt-1">
+                                Strict policy: <b>All {s.requested}</b> students from the uploaded file must be mapped in the system to create a proceeding.
+                            </div>
+                        )}
                         {(s.multiCourse || s.multiBatch || s.courses?.length || s.batches?.length) && (
-                            <div className={`text-xs mt-1 ${allOk ? 'text-emerald-800' : 'text-amber-800'}`}>
+                            <div className={`text-xs mt-1 ${hasUnmapped ? 'text-rose-700' : allOk ? 'text-emerald-800' : 'text-amber-800'}`}>
                                 {s.multiCourse
                                     ? `${s.courses.length} courses (${s.courses.slice(0, 6).join(', ')}${s.courses.length > 6 ? '…' : ''})`
                                     : (s.courses?.[0] ? `Course: ${s.courses[0]}` : null)}
@@ -1897,10 +1953,9 @@ const Proceedings = () => {
                                     : (s.batches?.[0] ? `Batch: ${s.batches[0]}` : null)}
                             </div>
                         )}
-                        {!allOk && (
+                        {!allOk && !hasUnmapped && (
                             <div className="text-xs text-amber-800 mt-1 space-y-0.5">
-                                {s.notFound.length > 0 && <div>{s.notFound.length} ID(s) not loaded — check filters or verify IDs</div>}
-                                {s.missingShareInExcel.length > 0 && <div>{s.missingShareInExcel.length} Excel row(s) missing share amount</div>}
+                                {s.missingShareInExcel.length > 0 && <div>{s.missingShareInExcel.length} file row(s) missing share amount</div>}
                                 {s.studentsMissingShare.length > 0 && <div>{s.studentsMissingShare.length} student(s) still need share amounts</div>}
                             </div>
                         )}
@@ -1910,30 +1965,56 @@ const Proceedings = () => {
                             <button
                                 type="button"
                                 onClick={() => setExcelSummaryExpanded(v => !v)}
-                                className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-white/80 border border-amber-200 text-amber-900 hover:bg-white"
+                                className={`text-[10px] font-bold px-2.5 py-1.5 rounded-lg border hover:bg-white ${
+                                    hasUnmapped ? 'bg-white/80 border-rose-300 text-rose-900' : 'bg-white/80 border-amber-200 text-amber-900'
+                                }`}
                             >
                                 {excelSummaryExpanded ? 'Hide details' : 'Show details'}
                             </button>
                         )}
                         <button
                             type="button"
-                            onClick={() => setExcelImportSummary(null)}
-                            className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-white/80 border border-slate-200 text-slate-600 hover:bg-white"
+                            onClick={() => {
+                                if (hasUnmapped) {
+                                    setExcelImportSummary(null);
+                                    setLoadedStudents([]);
+                                    setStudentChecks({});
+                                    setStudentShareAmounts({});
+                                    setStudentsLocked(false);
+                                } else {
+                                    setExcelImportSummary(null);
+                                }
+                            }}
+                            className={`text-[10px] font-bold px-2.5 py-1.5 rounded-lg border hover:bg-white ${
+                                hasUnmapped ? 'bg-white/80 border-rose-300 text-rose-700 hover:text-rose-800' : 'bg-white/80 border-slate-200 text-slate-600'
+                            }`}
+                            title={hasUnmapped ? 'Clear import and reset loaded students' : 'Dismiss summary'}
                         >
-                            Dismiss
+                            {hasUnmapped ? 'Clear Import' : 'Dismiss'}
                         </button>
                     </div>
                 </div>
                 {excelSummaryExpanded && (s.notFound.length > 0 || s.missingShareInExcel.length > 0 || s.studentsMissingShare.length > 0) && (
-                    <div className="px-4 pb-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-amber-200/80 pt-3">
+                    <div className={`px-4 pb-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 border-t pt-3 ${
+                        hasUnmapped ? 'border-rose-200' : 'border-amber-200/80'
+                    }`}>
                         {s.notFound.length > 0 && (
-                            <div className="bg-white/70 rounded-lg p-3 border border-amber-100 min-w-0">
-                                <div className="text-[10px] font-bold text-amber-900 uppercase mb-2">Not loaded ({s.notFound.length})</div>
-                                <ul className="text-xs text-slate-700 space-y-1.5 max-h-36 overflow-y-auto">
+                            <div className="bg-white/90 rounded-lg p-3 border border-rose-200 min-w-0 col-span-1 md:col-span-2">
+                                <div className="text-[10px] font-bold text-rose-900 uppercase mb-1 flex items-center justify-between">
+                                    <span>Unmapped Student IDs ({s.notFound.length}) — Creation Blocked</span>
+                                    <span className="text-[9px] font-semibold text-rose-600 normal-case">Action required</span>
+                                </div>
+                                <div className="text-[11px] text-rose-700 mb-2">
+                                    These student IDs could not be mapped to student records matching your filters:
+                                </div>
+                                <ul className="text-xs text-slate-700 space-y-1.5 max-h-48 overflow-y-auto">
                                     {s.notFound.map(n => (
-                                        <li key={n.applicationId} className="border-b border-amber-50 pb-1 last:border-0">
-                                            <span className="font-mono font-semibold text-amber-950">{n.applicationId}</span>
-                                            {n.message && <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">{n.message}</div>}
+                                        <li key={n.applicationId} className="border-b border-rose-100 pb-1.5 last:border-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-mono font-bold text-rose-950 bg-rose-100/70 px-1.5 py-0.5 rounded text-xs">{n.applicationId}</span>
+                                                <span className="text-[10px] uppercase font-semibold text-rose-600 bg-rose-50 px-1 rounded">{n.status || 'not_found'}</span>
+                                            </div>
+                                            {n.message && <div className="text-[11px] text-slate-600 mt-0.5 leading-snug">{n.message}</div>}
                                         </li>
                                     ))}
                                 </ul>
@@ -1941,7 +2022,7 @@ const Proceedings = () => {
                         )}
                         {s.missingShareInExcel.length > 0 && (
                             <div className="bg-white/70 rounded-lg p-3 border border-amber-100 min-w-0">
-                                <div className="text-[10px] font-bold text-amber-900 uppercase mb-2">Missing share in Excel ({s.missingShareInExcel.length})</div>
+                                <div className="text-[10px] font-bold text-amber-900 uppercase mb-2">Missing share in File ({s.missingShareInExcel.length})</div>
                                 <div className="text-xs font-mono text-slate-700 max-h-36 overflow-y-auto leading-relaxed break-all">
                                     {s.missingShareInExcel.join(', ')}
                                 </div>
@@ -2078,7 +2159,9 @@ const Proceedings = () => {
         && lockedStudents.length > 0
         && lockedStudents.every(s => Number(studentShareAmounts[s.studentId]) > 0);
 
-    const canSubmitProceeding = allSharesValid && Math.abs(remainingBalance) <= 0.009 && proceedingAmountNum > 0;
+    const hasUnmappedFileStudents = Boolean(excelImportSummary && excelImportSummary.notFound && excelImportSummary.notFound.length > 0);
+
+    const canSubmitProceeding = !hasUnmappedFileStudents && allSharesValid && Math.abs(remainingBalance) <= 0.009 && proceedingAmountNum > 0;
 
     const canLoadStudentsActions = Boolean(
         String(formData.proceedingNumber || '').trim()
@@ -2090,6 +2173,19 @@ const Proceedings = () => {
         : '';
 
     const lockSelectedStudents = () => {
+        if (excelImportSummary && excelImportSummary.notFound && excelImportSummary.notFound.length > 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Strict Validation Failed',
+                html: `<div style="text-align:left;font-size:13px;line-height:1.5">
+                    <p>Cannot confirm selection: <b>${excelImportSummary.notFound.length}</b> of <b>${excelImportSummary.requested}</b> students from the uploaded file are unmapped.</p>
+                    <p style="margin-top:8px;color:#dc2626;font-weight:600">All students from the uploaded file must be mapped to create a proceeding.</p>
+                </div>`,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#dc2626'
+            });
+            return;
+        }
         if (!formData.academicYear) {
             Swal.fire('Warning', 'Please select Academic Year first — it is used to calculate each student\'s proceeding year', 'warning');
             return;
@@ -2137,6 +2233,20 @@ const Proceedings = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (excelImportSummary && excelImportSummary.notFound && excelImportSummary.notFound.length > 0) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Strict Validation Failed',
+                html: `<div style="text-align:left;font-size:13px;line-height:1.5">
+                    <p>Cannot create proceeding: <b>${excelImportSummary.notFound.length}</b> of <b>${excelImportSummary.requested}</b> students from the uploaded file are unmapped.</p>
+                    <p style="margin-top:6px;color:#dc2626;font-weight:600">Strict policy: All students in the uploaded file must be successfully mapped before creating a proceeding.</p>
+                    <p style="margin-top:8px;font-size:12px;color:#64748b">Please ensure all student records exist in the system and match the filters before proceeding.</p>
+                </div>`,
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#dc2626'
+            });
+            return;
+        }
         if (!studentsLocked) {
             Swal.fire('Warning', 'Please confirm/lock the selected students, then enter each share amount', 'warning');
             return;
@@ -2236,6 +2346,8 @@ const Proceedings = () => {
                     batch: headerBatch || '',
                     students: studentsPayload,
                     amount: totalAmount,
+                    expectedStudentCount: excelImportSummary ? excelImportSummary.requested : undefined,
+                    unmappedStudentsCount: excelImportSummary ? (excelImportSummary.notFound?.length || 0) : 0,
                 };
                 if (attachmentFile) {
                     const fd = new FormData();
@@ -2260,7 +2372,9 @@ const Proceedings = () => {
                     course: headerCourse,
                     batch: headerBatch || '',
                     amount: totalAmount,
-                    students: studentsPayload
+                    students: studentsPayload,
+                    expectedStudentCount: excelImportSummary ? excelImportSummary.requested : undefined,
+                    unmappedStudentsCount: excelImportSummary ? (excelImportSummary.notFound?.length || 0) : 0,
                 };
                 if (attachmentFile) {
                     const fd = new FormData();
@@ -3526,8 +3640,14 @@ const Proceedings = () => {
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <div className="p-3 border-t border-slate-200 bg-white flex justify-end">
-                                            <button type="button" onClick={lockSelectedStudents} disabled={selectedCount === 0} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm disabled:opacity-50">
+                                        <div className="p-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 flex-wrap">
+                                            {hasUnmappedFileStudents ? (
+                                                <span className="text-xs text-rose-600 font-bold flex items-center gap-1.5">
+                                                    <AlertTriangle size={15} className="shrink-0 text-rose-500" />
+                                                    Confirmation blocked: {excelImportSummary.notFound.length} unmapped student(s) from uploaded file.
+                                                </span>
+                                            ) : <div />}
+                                            <button type="button" onClick={lockSelectedStudents} disabled={selectedCount === 0 || hasUnmappedFileStudents} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                                 Confirm Selection ({selectedCount}) & Enter Amounts
                                             </button>
                                         </div>
@@ -3614,7 +3734,13 @@ const Proceedings = () => {
                                     </>
                                 )}
 
-                                <div className="mt-6 flex justify-end gap-3">
+                                <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+                                    {hasUnmappedFileStudents ? (
+                                        <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+                                            <AlertTriangle size={16} className="text-rose-500 shrink-0" />
+                                            <span>Strict Validation: Proceeding creation blocked because {excelImportSummary.notFound.length} student(s) from the uploaded file are unmapped. All {excelImportSummary.requested} students must be mapped.</span>
+                                        </div>
+                                    ) : <div />}
                                     <button type="submit" disabled={!canSubmitProceeding || isSaving} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                                         {isSaving ? <><Loader2 size={18} className="animate-spin" /> Creating...</> : `Create Proceeding (${lockedStudents.length || selectedCount} students)`}
                                     </button>
@@ -4283,8 +4409,14 @@ const Proceedings = () => {
                                             </tbody>
                                         </table>
                                     </div>
-                                    <div className="p-3 border-t border-slate-200 bg-white flex justify-end">
-                                        <button type="button" onClick={lockSelectedStudents} disabled={selectedCount === 0} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm disabled:opacity-50">
+                                    <div className="p-3 border-t border-slate-200 bg-white flex items-center justify-between gap-3 flex-wrap">
+                                        {hasUnmappedFileStudents ? (
+                                            <span className="text-xs text-rose-600 font-bold flex items-center gap-1.5">
+                                                <AlertTriangle size={15} className="shrink-0 text-rose-500" />
+                                                Confirmation blocked: {excelImportSummary.notFound.length} unmapped student(s) from uploaded file.
+                                            </span>
+                                        ) : <div />}
+                                        <button type="button" onClick={lockSelectedStudents} disabled={selectedCount === 0 || hasUnmappedFileStudents} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm disabled:opacity-50 disabled:cursor-not-allowed">
                                             Confirm Selection ({selectedCount}) & Enter Amounts
                                         </button>
                                     </div>
@@ -4371,11 +4503,19 @@ const Proceedings = () => {
                                 </>
                             )}
 
-                            <div className="mt-6 flex justify-end gap-3">
-                                <button type="button" onClick={closeEditModal} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
-                                <button type="submit" disabled={!canSubmitProceeding || isSaving} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                                    {isSaving ? <><Loader2 size={18} className="animate-spin" /> Updating...</> : 'Update Proceeding'}
-                                </button>
+                            <div className="mt-6 flex items-center justify-between gap-3 flex-wrap">
+                                {hasUnmappedFileStudents ? (
+                                    <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold">
+                                        <AlertTriangle size={16} className="text-rose-500 shrink-0" />
+                                        <span>Strict Validation: Update blocked because {excelImportSummary.notFound.length} student(s) from the uploaded file are unmapped.</span>
+                                    </div>
+                                ) : <div />}
+                                <div className="flex gap-3">
+                                    <button type="button" onClick={closeEditModal} className="px-6 py-2.5 rounded-xl font-bold text-slate-500 hover:bg-slate-100">Cancel</button>
+                                    <button type="submit" disabled={!canSubmitProceeding || isSaving} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                                        {isSaving ? <><Loader2 size={18} className="animate-spin" /> Updating...</> : 'Update Proceeding'}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
