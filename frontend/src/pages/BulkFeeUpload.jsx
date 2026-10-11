@@ -39,7 +39,7 @@ const BulkFeeUpload = () => {
         }
 
         const dataToExport = mappingSummary.allFeeColumns.map(col => ({
-            'Excel Column': col.excelColumn,
+            'Excel Column / Fee Type': col.excelColumn,
             'Clean Search Term': col.cleanedHeader,
             'Status': col.status === 'MAPPED' ? '✓ MAPPED' : '⚠ UNMAPPED',
             'System Fee Head / Detail': col.status === 'MAPPED' ? col.mappedTo : `-`
@@ -435,7 +435,7 @@ const BulkFeeUpload = () => {
                                                                                             {p.mode || 'Cash'}
                                                                                         </span>
                                                                                     </td>
-                                                                                    <td className="px-4 py-2 text-xs font-mono text-gray-600">{p.ref || '-'}</td>
+                                                                                    <td className="px-4 py-2 text-xs font-mono text-gray-600">{p.receipt || p.ref || '-'}</td>
                                                                                     <td className="px-4 py-2 text-xs text-gray-500">{p.remarks || '-'}</td>
                                                                                 </tr>
                                                                             ))
@@ -503,7 +503,7 @@ const BulkFeeUpload = () => {
                             <div>
                                 <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
                                     <CheckSquare className="w-4 h-4 text-blue-600" />
-                                    Fee Columns Detected in Excel ({mappingSummary.allFeeColumns?.length || mappingSummary.mapped?.length || 0})
+                                    Fee Heads / Types Detected in Excel ({mappingSummary.allFeeColumns?.length || mappingSummary.mapped?.length || 0})
                                 </h3>
                                 
                                 {mappingSummary.allFeeColumns && mappingSummary.allFeeColumns.length > 0 ? (
@@ -511,7 +511,7 @@ const BulkFeeUpload = () => {
                                         <table className="w-full text-sm text-left">
                                             <thead className="bg-gray-50 text-xs text-gray-500 uppercase border-b">
                                                 <tr>
-                                                    <th className="px-4 py-2.5">Excel Column</th>
+                                                    <th className="px-4 py-2.5">Excel Column / Fee Type</th>
                                                     <th className="px-4 py-2.5">Clean Search Term</th>
                                                     <th className="px-4 py-2.5 text-center">Status</th>
                                                     <th className="px-4 py-2.5">System Fee Head / Detail</th>
@@ -532,6 +532,11 @@ const BulkFeeUpload = () => {
                                                                     <span className="inline-flex items-center gap-1.5">
                                                                         <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-purple-200 uppercase">FEE HEAD</span>
                                                                         <span className="font-bold font-mono">{col.excelColumn.replace('Fee Head: ', '')}</span>
+                                                                    </span>
+                                                                ) : col.excelColumn.startsWith('Fee Type: ') ? (
+                                                                    <span className="inline-flex items-center gap-1.5">
+                                                                        <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded border border-emerald-200 uppercase">FEE TYPE</span>
+                                                                        <span className="font-bold font-mono">{col.excelColumn.replace('Fee Type: ', '')}</span>
                                                                     </span>
                                                                 ) : (
                                                                     <span className="font-bold font-mono">{col.excelColumn}</span>

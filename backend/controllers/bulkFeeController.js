@@ -82,6 +82,12 @@ const processBulkUpload = async (req, res) => {
             return res.status(400).json({ message: 'File is empty or missing headers' });
         }
 
+        const isLedgerFormat = rawData.some(row => {
+            if (!row || !Array.isArray(row)) return false;
+            const rowStr = row.map(c => c ? String(c) : '').join(' ');
+            return /Student\s*Name\s*:/i.test(rowStr) && /Admn[;:.]*\s*No/i.test(rowStr);
+        });
+
         const row0 = rawData[0];
         const colMap = {};
         row0.forEach((h, i) => {
@@ -297,7 +303,7 @@ const processBulkUpload = async (req, res) => {
             const normCol = originalColName.toUpperCase().replace(/[^A-Z0-9]/g, '');
             return { originalColName, cleanCol, normCol, matchedHead };
         };
-
+        if (!isLedgerFormat) {
         for (let i = 0; i < row0.length; i++) {
             const h = row0[i];
             if (!h) continue;
@@ -434,8 +440,9 @@ const processBulkUpload = async (req, res) => {
                 });
             }
         });
+        }
 
-        if (colMap.ADMISSION === undefined && colMap.PIN === undefined && Object.keys(feeHeadColMap).length === 0 && colMap.FEE_HEAD === undefined) {
+        if (!isLedgerFormat && colMap.ADMISSION === undefined && colMap.PIN === undefined && Object.keys(feeHeadColMap).length === 0 && colMap.FEE_HEAD === undefined) {
             return res.status(400).json({ message: 'File missing critical student identification column (Admission No or Pin No). Please check your headers.' });
         }
 
@@ -443,13 +450,28 @@ const processBulkUpload = async (req, res) => {
         const rawIds = new Set();
         for (let r = 1; r < rawData.length; r++) {
             const row = rawData[r];
-            let rawId = null;
-            if (colMap.ADMISSION !== undefined && row[colMap.ADMISSION]) rawId = row[colMap.ADMISSION];
-            if (!rawId && colMap.PIN !== undefined && row[colMap.PIN]) rawId = row[colMap.PIN];
-            if (!rawId && colMap.ID !== undefined && row[colMap.ID]) rawId = row[colMap.ID];
-            if (rawId) {
-                const normalized = normalizeId(rawId);
-                if (normalized) rawIds.add(normalized);
+            if (!row) continue;
+
+            if (isLedgerFormat) {
+                const rowText = row.filter(Boolean).map(c => String(c).trim()).join(' ');
+                if (/Student\s*Name\s*:/i.test(rowText)) {
+                    const admMatch = rowText.match(/Admn[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i) || 
+                                     rowText.match(/Admission[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i) ||
+                                     rowText.match(/Adm[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i);
+                    if (admMatch) {
+                        const normalized = normalizeId(admMatch[1]);
+                        if (normalized) rawIds.add(normalized);
+                    }
+                }
+            } else {
+                let rawId = null;
+                if (colMap.ADMISSION !== undefined && row[colMap.ADMISSION]) rawId = row[colMap.ADMISSION];
+                if (!rawId && colMap.PIN !== undefined && row[colMap.PIN]) rawId = row[colMap.PIN];
+                if (!rawId && colMap.ID !== undefined && row[colMap.ID]) rawId = row[colMap.ID];
+                if (rawId) {
+                    const normalized = normalizeId(rawId);
+                    if (normalized) rawIds.add(normalized);
+                }
             }
         }
 
@@ -499,15 +521,26 @@ const processBulkUpload = async (req, res) => {
             if (!xlsDate) return new Date();
 
             if (xlsDate instanceof Date) {
-                return isNaN(xlsDate.getTime()) ? new Date() : xlsDate;
+                if (isNaN(xlsDate.getTime())) return new Date();
+                return new Date(Date.UTC(xlsDate.getFullYear(), xlsDate.getMonth(), xlsDate.getDate(), 12, 0, 0));
             }
             
             if (typeof xlsDate === 'number') {
-                return new Date((xlsDate - 25569) * 86400 * 1000);
+                const utcMillis = Math.round((xlsDate - 25569) * 86400 * 1000);
+                const d = new Date(utcMillis);
+                return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0));
             }
             
             const s = String(xlsDate).trim();
             if (!s) return new Date();
+
+            // Handle ISO strings with 'T' (e.g. from frontend preview)
+            if (s.includes('T')) {
+                const attempt = new Date(s);
+                if (!isNaN(attempt.getTime())) {
+                    return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                }
+            }
 
             // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (or D/M/YYYY or YYYY/MM/DD)
             if (s.includes('/')) {
@@ -523,23 +556,21 @@ const processBulkUpload = async (req, res) => {
                         const year = first;
                         const month = second - 1;
                         const day = third;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // DD/MM/YYYY format: first = Day, second = Month
                         const day = first;
                         const month = second - 1;
                         let year = third;
                         if (year < 100) year += 2000;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     }
                 }
             }
 
-            // 2. Hyphens (-) -> MM-DD-YYYY or YYYY-MM-DD
+            // 2. Hyphens (-) -> MM-DD-YYYY (or YYYY-MM-DD if ISO)
             if (s.includes('-')) {
-                const datePart = s.split(' ')[0];
+                const datePart = s.split('T')[0].split(' ')[0];
                 const parts = datePart.split('-');
                 if (parts.length >= 3) {
                     const first = parseInt(parts[0], 10);
@@ -551,22 +582,23 @@ const processBulkUpload = async (req, res) => {
                         const year = first;
                         const month = second - 1;
                         const day = third;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
-                        // MM-DD-YYYY format: first = Month, second = Day
+                        // Hyphens (-) are strictly MM-DD-YYYY
                         const month = first - 1;
                         const day = second;
                         let year = third;
                         if (year < 100) year += 2000;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     }
                 }
             }
 
             const attempt = new Date(s);
-            return isNaN(attempt.getTime()) ? new Date() : attempt;
+            if (!isNaN(attempt.getTime())) {
+                return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+            }
+            return new Date();
         };
         const parseSecId = (val) => {
             if (!val) return { year: null, semester: null };
@@ -590,6 +622,226 @@ const processBulkUpload = async (req, res) => {
         let activeSectionHead = null;
 
         // --- PHASE 3: PROCESSING & GROUPING ---
+        if (uploadType === 'PAYMENT' && isLedgerFormat) {
+            let semCol = -1;
+            let feeTypeCol = -1;
+            let transDateCol = -1;
+            let narrationCol = -1;
+            let drAmtCol = -1;
+            let crAmtCol = -1;
+            let balAmtCol = -1;
+            let recpNoCol = -1;
+
+            row0.forEach((cell, idx) => {
+                if (!cell) return;
+                const h = String(cell).toUpperCase().trim();
+                const clean = h.replace(/[^A-Z0-9]/g, '');
+                if (clean === 'SEM' || clean === 'SEMESTER') semCol = idx;
+                else if (clean === 'FEETYPE' || clean.includes('FEETYPE') || clean === 'FEE') feeTypeCol = idx;
+                else if (clean.includes('DATE') || clean.includes('TRANSDATE')) transDateCol = idx;
+                else if (clean.includes('NARRATION') || clean.includes('PARTICULAR') || clean.includes('REMARK')) narrationCol = idx;
+                else if (clean === 'DRCR') { /* Ignore Dr/Cr indicator column */ }
+                else if (clean.includes('DRAMT') || (clean.includes('DR') && clean.includes('AMT'))) drAmtCol = idx;
+                else if (clean.includes('CRAMT') || (clean.includes('CR') && clean.includes('AMT'))) crAmtCol = idx;
+                else if (clean.includes('BALAMT') || clean.includes('BAL') || clean.includes('BALANCE')) balAmtCol = idx;
+                else if (clean.includes('RECP') || clean.includes('RECEIPT') || clean.includes('REF')) recpNoCol = idx;
+            });
+
+            // Standard layout fallbacks:
+            // Col A (0): Sem
+            // Col B (1): Fee Type
+            // Col C (2): TransDate
+            // Col D (3): Narration
+            // Col E (4): Dr Amt
+            // Col F (5): Cr Amt
+            // Col G (6): Bal Amt
+            // Col H (7): Dr/Cr
+            // Col I (8): Recp No
+            if (semCol === -1) semCol = 0;
+            if (feeTypeCol === -1) feeTypeCol = 1;
+            if (transDateCol === -1) transDateCol = 2;
+            if (narrationCol === -1) narrationCol = 3;
+            if (drAmtCol === -1) drAmtCol = 4;
+            if (crAmtCol === -1) crAmtCol = 5;
+            if (balAmtCol === -1) balAmtCol = 6;
+            if (recpNoCol === -1) recpNoCol = 8;
+
+            let currentStudent = null;
+
+            for (let r = 1; r < rawData.length; r++) {
+                const row = rawData[r];
+                if (!row || row.length === 0) continue;
+
+                const rowText = row.filter(Boolean).map(c => String(c).trim()).join(' ');
+                if (!rowText) continue;
+
+                // Check for Student Header Row
+                if (/Student\s*Name\s*:/i.test(rowText)) {
+                    const admMatch = rowText.match(/Admn[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i) || 
+                                     rowText.match(/Admission[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i) ||
+                                     rowText.match(/Adm[;:.]*\s*No[;:.]*\s*([A-Za-z0-9_\-\/]+)/i);
+                    const nameMatch = rowText.match(/Student\s*Name[;:\s]+(.*?)(?=\s+Admn|\s+Adm|\s+Pin|\s+Parent|$)/i);
+
+                    if (admMatch) {
+                        const rawAdm = admMatch[1].trim();
+                        const parsedName = nameMatch ? nameMatch[1].trim() : 'Unknown';
+                        const normAdm = normalizeId(rawAdm);
+                        const sInfo = dbMap[normAdm];
+
+                        currentStudent = {
+                            rawId: rawAdm,
+                            normId: normAdm,
+                            sInfo: sInfo,
+                            canonId: sInfo ? sInfo.admission_number : rawAdm.toUpperCase(),
+                            name: sInfo ? sInfo.student_name : parsedName
+                        };
+                    }
+                    continue;
+                }
+
+                if (!currentStudent) continue;
+
+                // Skip Balance / Totals / Subtotals (NEGLECT THE BALANCE ROW FOR EVERY STUDENT)
+                const rowLower = rowText.toLowerCase();
+                const narrationVal = narrationCol !== -1 && row[narrationCol] ? String(row[narrationCol]).toLowerCase().trim() : '';
+                if (
+                    rowLower.includes('balance') || 
+                    narrationVal.includes('balance') || 
+                    rowLower.includes('total') || 
+                    rowLower.includes('subtotal') || 
+                    rowLower.includes('grand total')
+                ) {
+                    skippedRows++;
+                    continue;
+                }
+
+                // Check if it's a valid data row (must have Sem and Fee Type)
+                const semVal = row[semCol] !== undefined && row[semCol] !== null ? String(row[semCol]).trim() : '';
+                const feeTypeVal = row[feeTypeCol] !== undefined && row[feeTypeCol] !== null ? String(row[feeTypeCol]).trim() : '';
+
+                if (!semVal || !feeTypeVal || semVal.toLowerCase() === 'sem' || feeTypeVal.toLowerCase() === 'fee type' || feeTypeVal.toLowerCase() === 'feetype') {
+                    // Blank row, continuation remarks, or balance/total rows
+                    skippedRows++;
+                    continue;
+                }
+
+                // Check Cr Amt (ONLY TAKE CR AMOUNTS - STRICTLY IGNORE DR ROWS)
+                const crAmtVal = crAmtCol !== -1 && row[crAmtCol] !== undefined && row[crAmtCol] !== null ? parseFloat(row[crAmtCol]) : 0;
+                if (isNaN(crAmtVal) || crAmtVal <= 0) {
+                    // Dr Amt row or 0/empty Cr Amt, strictly skip!
+                    skippedRows++;
+                    continue;
+                }
+
+                // Current Year Filtering
+                const parsedSec = parseSecId(semVal);
+                const rowYear = parsedSec.year || parseYear(semVal);
+                const semester = parsedSec.semester || 1;
+
+                const dbCurrentYear = currentStudent.sInfo && currentStudent.sInfo.current_year ? parseYear(currentStudent.sInfo.current_year) : null;
+
+                if (dbCurrentYear && rowYear !== dbCurrentYear) {
+                    console.log(`[SKIP LEDGER] Student ${currentStudent.canonId}: Skipped year ${rowYear} payment row (DB Current Year is ${dbCurrentYear})`);
+                    skippedRows++;
+                    continue;
+                }
+
+                // Map Fee Head using fuzzy matcher
+                let matchedHead = null;
+                if (feeTypeVal) {
+                    const matchRes = matchFeeHeadByText(feeTypeVal);
+                    matchedHead = matchRes.matchedHead;
+
+                    const cleanFee = matchRes.cleanCol || feeTypeVal;
+                    if (!allFeeColumns.some(c => c.excelColumn === feeTypeVal || c.excelColumn === `Fee Type: ${feeTypeVal}`)) {
+                        if (matchedHead) {
+                            mappedFeeHeads.push({
+                                excelColumn: `Fee Type: ${feeTypeVal}`,
+                                feeHeadId: matchedHead._id.toString(),
+                                feeHeadName: matchedHead.name
+                            });
+                        } else {
+                            unmappedColumns.push({
+                                excelColumn: `Fee Type: ${feeTypeVal}`,
+                                cleanedHeader: cleanFee,
+                                reason: `No system Fee Head matches '${cleanFee}'`
+                            });
+                        }
+                        allFeeColumns.push({
+                            excelColumn: `Fee Type: ${feeTypeVal}`,
+                            cleanedHeader: cleanFee,
+                            status: matchedHead ? 'MAPPED' : 'UNMAPPED',
+                            mappedTo: matchedHead ? matchedHead.name : null
+                        });
+                    }
+                }
+
+                const headObj = matchedHead || (allFeeHeads.find(h => h.name.toLowerCase().includes('tuition')) || allFeeHeads[0]);
+
+                // Extract Receipt Number (Col I / index 8)
+                let receiptNo = '';
+                if (recpNoCol !== -1 && row[recpNoCol] !== undefined && row[recpNoCol] !== null) {
+                    const val = String(row[recpNoCol]).trim();
+                    if (val && !val.toLowerCase().includes('cr') && !val.toLowerCase().includes('dr') && !val.toLowerCase().includes('balance')) {
+                        receiptNo = val;
+                    }
+                }
+                if (!receiptNo && row.length > 7) {
+                    for (let c = row.length - 1; c >= 7; c--) {
+                        if (c === crAmtCol || c === drAmtCol || c === balAmtCol) continue;
+                        const val = row[c] !== undefined && row[c] !== null ? String(row[c]).trim() : '';
+                        if (val && !val.toLowerCase().includes('cr') && !val.toLowerCase().includes('dr') && !val.toLowerCase().includes('balance')) {
+                            receiptNo = val;
+                            break;
+                        }
+                    }
+                }
+
+                const transDate = transDateCol !== -1 && row[transDateCol] ? parseDate(row[transDateCol]) : new Date();
+                const payMode = 'Cash'; // User explicitly specified: Always set payment mode to 'Cash'
+
+                const canonId = currentStudent.canonId;
+                if (!previewDataMap.has(canonId)) {
+                    const sInfo = currentStudent.sInfo;
+                    const dbCurrYr = sInfo && sInfo.current_year ? parseYear(sInfo.current_year) : null;
+                    previewDataMap.set(canonId, {
+                        id: previewDataMap.size + 1,
+                        displayId: canonId,
+                        studentName: currentStudent.name,
+                        totalDemand: 0,
+                        totalPaid: 0,
+                        demands: [],
+                        payments: [],
+                        year: dbCurrYr || rowYear,
+                        semester: semester,
+                        admissionNumber: sInfo ? sInfo.admission_number : null,
+                        pinNumber: sInfo ? sInfo.pin_no : null,
+                        college: sInfo ? sInfo.college : 'Unknown',
+                        course: sInfo ? sInfo.course : 'Unknown',
+                        branch: sInfo ? sInfo.branch : 'Unknown',
+                        batch: sInfo ? sInfo.batch : '2024-2025',
+                        category: sInfo ? sInfo.stud_type : 'Regular',
+                        dbCurrentYear: dbCurrYr
+                    });
+                }
+
+                const entry = previewDataMap.get(canonId);
+                entry.payments.push({
+                    headId: headObj ? headObj._id.toString() : 'UNKNOWN',
+                    headName: headObj ? headObj.name : feeTypeVal || 'General Fee',
+                    year: rowYear,
+                    semester: semester,
+                    amount: crAmtVal,
+                    mode: payMode,
+                    date: transDate,
+                    ref: receiptNo,
+                    receipt: receiptNo,
+                    remarks: `Bulk Payment - Yr ${rowYear} Sem ${semester}${receiptNo ? ` (Recp: ${receiptNo})` : ''}`
+                });
+                entry.totalPaid += crAmtVal;
+                processedCount++;
+            }
+        } else {
         for (let r = 1; r < rawData.length; r++) {
             const row = rawData[r];
             if (!row || row.length === 0) continue;
@@ -832,6 +1084,7 @@ const processBulkUpload = async (req, res) => {
                 }
             }
             processedCount++;
+        }
         }
 
         const previewData = Array.from(previewDataMap.values());
@@ -1093,15 +1346,26 @@ const saveBulkData = async (req, res) => {
             if (!val) return new Date();
 
             if (val instanceof Date) {
-                return isNaN(val.getTime()) ? new Date() : val;
+                if (isNaN(val.getTime())) return new Date();
+                return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate(), 12, 0, 0));
             }
             
             if (typeof val === 'number') {
-                return new Date((val - 25569) * 86400 * 1000);
+                const utcMillis = Math.round((val - 25569) * 86400 * 1000);
+                const d = new Date(utcMillis);
+                return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0));
             }
             
             const s = String(val).trim();
             if (!s) return new Date();
+
+            // Handle ISO strings with 'T' (e.g. from frontend preview)
+            if (s.includes('T')) {
+                const attempt = new Date(s);
+                if (!isNaN(attempt.getTime())) {
+                    return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                }
+            }
 
             // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (or D/M/YYYY or YYYY/MM/DD)
             if (s.includes('/')) {
@@ -1117,23 +1381,21 @@ const saveBulkData = async (req, res) => {
                         const year = first;
                         const month = second - 1;
                         const day = third;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // DD/MM/YYYY format: first = Day, second = Month
                         const day = first;
                         const month = second - 1;
                         let year = third;
                         if (year < 100) year += 2000;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     }
                 }
             }
 
-            // 2. Hyphens (-) -> MM-DD-YYYY or YYYY-MM-DD
+            // 2. Hyphens (-) -> MM-DD-YYYY (or YYYY-MM-DD if ISO)
             if (s.includes('-')) {
-                const datePart = s.split(' ')[0];
+                const datePart = s.split('T')[0].split(' ')[0];
                 const parts = datePart.split('-');
                 if (parts.length >= 3) {
                     const first = parseInt(parts[0], 10);
@@ -1145,22 +1407,23 @@ const saveBulkData = async (req, res) => {
                         const year = first;
                         const month = second - 1;
                         const day = third;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
-                        // MM-DD-YYYY format: first = Month, second = Day
+                        // Hyphens (-) are strictly MM-DD-YYYY
                         const month = first - 1;
                         const day = second;
                         let year = third;
                         if (year < 100) year += 2000;
-                        const d = new Date(year, month, day);
-                        if (!isNaN(d.getTime())) return d;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     }
                 }
             }
 
             const attempt = new Date(s);
-            return isNaN(attempt.getTime()) ? new Date() : attempt;
+            if (!isNaN(attempt.getTime())) {
+                return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+            }
+            return new Date();
         };
 
         students.forEach(stud => {
