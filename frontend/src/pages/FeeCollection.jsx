@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import Swal from 'sweetalert2';
 import api from '../lib/api';
 import { useReactToPrint } from 'react-to-print';
 import Sidebar from './Sidebar';
@@ -902,21 +903,55 @@ const FeeCollection = () => {
                 showToastMessage(`Cannot transfer to the exact same fee head in the same year and semester.`, 'error');
                 return;
             }
-
-
         }
 
         const totalRowAmount = transferRows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-        if (Math.abs(totalRowAmount - Number(transferForm.amount)) > 0.01) {
-            showToastMessage(`Total split amount (₹${totalRowAmount.toLocaleString('en-IN')}) must exactly match the source transaction amount (₹${Number(transferForm.amount).toLocaleString('en-IN')}).`, 'error');
+        if (totalRowAmount <= 0) {
+            showToastMessage('Total transfer amount must be greater than 0.', 'error');
+            return;
+        }
+        if (totalRowAmount > Number(sourceTx.amount) + 0.001) {
+            showToastMessage(`Total transfer amount (₹${totalRowAmount.toLocaleString('en-IN')}) cannot exceed the source transaction amount (₹${Number(sourceTx.amount).toLocaleString('en-IN')}).`, 'error');
             return;
         }
 
-        const confirmTransfer = window.confirm(
-            `Are you sure you want to execute this ledger transfer for ₹${Number(transferForm.amount).toLocaleString('en-IN')} divided into ${transferRows.length} target head(s)?`
-        );
-        
-        if (!confirmTransfer) return;
+        const isPartial = totalRowAmount < (Number(sourceTx.amount) - 0.001);
+        const remAmount = Math.round((Number(sourceTx.amount) - totalRowAmount) * 100) / 100;
+
+        const confirmResult = await Swal.fire({
+            title: isPartial ? 'Confirm Partial Transfer' : 'Confirm Full Transfer',
+            html: isPartial ? `
+                <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #374151;">
+                    <p style="margin-bottom: 10px; font-weight: 500;">
+                        Are you sure you want to partially transfer <strong style="color: #2563eb; font-size: 14px;">₹${totalRowAmount.toLocaleString('en-IN')}</strong> to <strong>${transferRows.length} target head(s)</strong>?
+                    </p>
+                    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px;">
+                        <div><strong style="color: #166534;">Remaining in ${transferForm.sourceFeeHeadName}:</strong> <span style="font-weight: 700; color: #15803d;">₹${remAmount.toLocaleString('en-IN')}</span></div>
+                        <div><strong style="color: #166534;">Receipt Number:</strong> <span style="font-family: monospace; font-weight: 600;">${sourceTx.receiptNumber || 'N/A'}</span></div>
+                    </div>
+                    <p style="font-size: 11px; color: #6b7280; margin: 0;">
+                        A new transaction will be created for <strong>₹${totalRowAmount.toLocaleString('en-IN')}</strong> on the same date with the shared receipt number.
+                    </p>
+                </div>
+            ` : `
+                <div style="text-align: left; font-size: 13px; line-height: 1.6; color: #374151;">
+                    <p style="margin-bottom: 10px; font-weight: 500;">
+                        Are you sure you want to execute a full transfer of <strong style="color: #2563eb; font-size: 14px;">₹${totalRowAmount.toLocaleString('en-IN')}</strong> divided into <strong>${transferRows.length} target head(s)</strong>?
+                    </p>
+                    <div style="background-color: #fffbeb; border: 1px solid #fef3c7; padding: 8px 12px; border-radius: 8px; font-size: 12px; color: #92400e;">
+                        The original transaction will be marked as transferred.
+                    </div>
+                </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#2563eb',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Yes, Execute Transfer',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (!confirmResult.isConfirmed) return;
 
         setIsProcessing(true);
         try {
@@ -930,7 +965,7 @@ const FeeCollection = () => {
                 remarks: transferForm.remarks
             });
 
-            showToastMessage('Payment transferred successfully!', 'success');
+            showToastMessage(res.data?.message || 'Payment transferred successfully!', 'success');
             setTransferForm({
                 sourceTxId: '',
                 amount: '',
@@ -942,8 +977,11 @@ const FeeCollection = () => {
             ]);
 
             if (res.data?.targetTransactions && res.data.targetTransactions.length > 0) {
+                const allReceiptTxns = res.data?.isPartialTransfer && res.data?.sourceTransaction
+                    ? [res.data.sourceTransaction, ...res.data.targetTransactions]
+                    : res.data.targetTransactions;
                 setLastTransaction(res.data.targetTransactions[0]);
-                setRelatedTransactions(res.data.targetTransactions);
+                setRelatedTransactions(allReceiptTxns);
                 setShowReceiptModal(true);
             }
 
@@ -2800,7 +2838,7 @@ const FeeCollection = () => {
                                                                 Select Source Transaction
                                                             </label>
                                                             {(() => {
-                                                                const transferableTransactions = transactions.filter(t => t.status === 'active' && t.paymentMode !== 'Transfer' && t.transactionType === 'DEBIT');
+                                                                const transferableTransactions = transactions.filter(t => t.status === 'active' && t.transactionType === 'DEBIT');
                                                                 if (transferableTransactions.length === 0) {
                                                                     return (
                                                                         <div className="p-3 text-xs bg-gray-50 border border-gray-100 rounded-xl text-gray-500 font-medium text-center">
@@ -2855,10 +2893,14 @@ const FeeCollection = () => {
                                                                      const configuredExcessHeadId = String(receiptSettings?.excessFeeHead || '');
                                                                      const isExcess = (configuredExcessHeadId && sourceFeeHeadId === configuredExcessHeadId) || sourceFeeHeadName.includes('excess');
 
+                                                                     const totalTransferAmt = transferRows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+                                                                     const remAmt = Math.round((Number(selectedSourceTx.amount) - totalTransferAmt) * 100) / 100;
+                                                                     const isOver = totalTransferAmt > (Number(selectedSourceTx.amount) + 0.001);
+
                                                                      return (
                                                                          <div className="p-3 bg-blue-50/50 border border-blue-100 rounded-xl space-y-1.5 text-xs mb-3">
                                                                              <div className="flex justify-between items-center">
-                                                                                 <span className="text-gray-500 font-medium">Original Fee Head:</span>
+                                                                                 <span className="text-gray-500 font-medium">Source Fee Head:</span>
                                                                                  <span className="font-bold text-gray-800 flex items-center gap-1.5">
                                                                                      {transferForm.sourceFeeHeadName}
                                                                                      {isExcess ? (
@@ -2868,13 +2910,38 @@ const FeeCollection = () => {
                                                                                      )}
                                                                                  </span>
                                                                              </div>
-                                                                             <div className="flex justify-between">
-                                                                                 <span className="text-gray-500 font-medium">Transfer Amount:</span>
-                                                                                 <span className="font-bold text-blue-700 font-mono">₹{Number(transferForm.amount).toLocaleString('en-IN')}</span>
+                                                                             <div className="flex justify-between items-center">
+                                                                                 <span className="text-gray-500 font-medium">Source Tx Amount:</span>
+                                                                                 <span className="font-bold text-gray-800 font-mono">₹{Number(selectedSourceTx.amount).toLocaleString('en-IN')}</span>
                                                                              </div>
-                                                                             <div className="text-[10.5px] text-gray-500 pt-1 border-t border-blue-100/60 leading-tight">
-                                                                                 <span className="text-emerald-700 font-medium">✓ Active fee transactions can be transferred to any target fee head, student year, or semester.</span>
+                                                                             <div className="flex justify-between items-center">
+                                                                                 <span className="text-gray-500 font-medium">Receipt No & Date:</span>
+                                                                                 <span className="font-semibold text-gray-700 font-mono text-[11px]">
+                                                                                     {selectedSourceTx.receiptNumber || 'No Rec'} · {selectedSourceTx.paymentDate ? new Date(selectedSourceTx.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                                                                                 </span>
                                                                              </div>
+                                                                             <div className="pt-2 border-t border-blue-100/80 flex justify-between items-center">
+                                                                                 <span className="text-gray-600 font-medium">Total Transfer Amount:</span>
+                                                                                 <span className={`font-bold font-mono text-sm ${isOver ? 'text-red-600' : 'text-blue-700'}`}>
+                                                                                     ₹{totalTransferAmt.toLocaleString('en-IN')}
+                                                                                 </span>
+                                                                             </div>
+                                                                             <div className="flex justify-between items-center">
+                                                                                 <span className="text-gray-600 font-medium">Remaining in Source:</span>
+                                                                                 <span className={`font-bold font-mono ${isOver ? 'text-red-600' : remAmt === 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                                                                     ₹{remAmt.toLocaleString('en-IN')} {remAmt === 0 ? '(Full Transfer)' : remAmt > 0 ? '(Partial Transfer)' : '(Exceeded!)'}
+                                                                                 </span>
+                                                                             </div>
+                                                                             {isOver && (
+                                                                                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-[11px] text-red-700 font-semibold">
+                                                                                     ⚠ Total transfer amount cannot exceed available source amount (₹{Number(selectedSourceTx.amount).toLocaleString('en-IN')}).
+                                                                                 </div>
+                                                                             )}
+                                                                             {!isOver && remAmt > 0 && totalTransferAmt > 0 && (
+                                                                                 <div className="p-2 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 font-medium">
+                                                                                     ✓ Partial Transfer: ₹{totalTransferAmt.toLocaleString('en-IN')} will be transferred to target head(s) on the same date ({selectedSourceTx.paymentDate ? new Date(selectedSourceTx.paymentDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}) with receipt {selectedSourceTx.receiptNumber || '—'}. ₹{remAmt.toLocaleString('en-IN')} will remain in {transferForm.sourceFeeHeadName}.
+                                                                                 </div>
+                                                                             )}
                                                                          </div>
                                                                      );
                                                                  })()}
@@ -2993,7 +3060,12 @@ const FeeCollection = () => {
 
                                                                                      {/* Amount Field */}
                                                                                      <div>
-                                                                                         <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">Transfer Amount</label>
+                                                                                         <div className="flex justify-between items-center mb-1">
+                                                                                        <label className="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Transfer Amount</label>
+                                                                                        {selectedSourceTx && (
+                                                                                            <span className="text-[9px] text-gray-400">Max: ₹{Number(selectedSourceTx.amount).toLocaleString('en-IN')}</span>
+                                                                                        )}
+                                                                                    </div>
                                                                                          <input
                                                                                              type="number"
                                                                                              className="w-full border border-gray-300 rounded-lg p-1.5 text-xs font-bold text-slate-800 focus:border-blue-500 outline-none"

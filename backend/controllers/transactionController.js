@@ -1082,21 +1082,31 @@ const transferTransaction = async (req, res) => {
       }];
     }
 
-    // Validate targets total amount matches source transaction amount exactly
+    // Validate targets total amount
     const totalTargetAmt = targets.reduce((sum, t) => sum + Number(t.amount || 0), 0);
-    if (Math.abs(totalTargetAmt - transactionA.amount) > 0.01) {
+    if (totalTargetAmt <= 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({ message: 'Total transfer amount must be greater than 0.' });
+    }
+
+    if (totalTargetAmt > (transactionA.amount + 0.0001)) {
       await session.abortTransaction();
       session.endSession();
       return res.status(400).json({
-        message: `Total transfer amount (₹${totalTargetAmt}) must exactly match the source transaction amount (₹${transactionA.amount}).`
+        message: `Total transfer amount (₹${totalTargetAmt}) cannot exceed the source transaction amount (₹${transactionA.amount}).`
       });
     }
+
+    const isPartialTransfer = totalTargetAmt < (transactionA.amount - 0.0001);
+    const remainingAmount = Math.round((transactionA.amount - totalTargetAmt) * 100) / 100;
 
     const FeeHead = require('../models/FeeHead');
     const sourceFeeHead = await FeeHead.findById(transactionA.feeHead).session(session);
     const sourceName = sourceFeeHead ? sourceFeeHead.name : 'Unknown Fee Head';
     const transferDate = new Date();
     const createdTransactions = [];
+    const targetHeadNames = [];
 
     // Loop and insert destination transactions
     for (const t of targets) {
@@ -1106,6 +1116,7 @@ const transferTransaction = async (req, res) => {
         session.endSession();
         return res.status(404).json({ message: `Target fee head not found for ID: ${t.targetFeeHeadId}` });
       }
+      targetHeadNames.push(targetFeeHead.name);
 
       const transactionB = new Transaction({
         studentId: transactionA.studentId,
@@ -1120,33 +1131,69 @@ const transferTransaction = async (req, res) => {
         admissionNumber: transactionA.admissionNumber,
         feeHead: t.targetFeeHeadId,
         amount: Number(t.amount),
-        paymentDate: transactionA.paymentDate, // Preserve original date
+        paymentDate: transactionA.paymentDate, // Exact same source transaction date
         transactionType: 'DEBIT',
-        paymentMode: 'Transfer',
+        paymentMode: transactionA.paymentMode || 'Cash', // Exact same payment mode
+        bankName: transactionA.bankName,
+        instrumentDate: transactionA.instrumentDate,
+        referenceNo: transactionA.referenceNo,
+        referenceDate: transactionA.referenceDate,
+        paymentConfigId: transactionA.paymentConfigId,
+        depositedToAccount: transactionA.depositedToAccount,
+        proceedingId: transactionA.proceedingId,
+        concessionRequestId: transactionA.concessionRequestId,
         status: 'active',
         semester: t.semester || 'All',
-        studentYear: t.studentYear,
-        receiptNumber: transactionA.receiptNumber, // Shared receipt number
-        collectedBy: req.user?.username || 'Unknown',
-        collectedByName: req.user?.name || 'Unknown',
+        studentYear: t.studentYear || transactionA.studentYear,
+        receiptNumber: transactionA.receiptNumber, // Exact same receipt number
+        collectedBy: req.user?.username || transactionA.collectedBy || 'Unknown',
+        collectedByName: req.user?.name || transactionA.collectedByName || 'Unknown',
         remarks: remarks || `Transfer from ${sourceName}`,
         transferredFromTransactionId: transactionA._id
       });
+
+      if (transactionA.createdAt) {
+        transactionB.set('createdAt', transactionA.createdAt);
+      }
 
       await transactionB.save({ session });
       createdTransactions.push(transactionB);
     }
 
-    // Update Transaction A (the source)
-    transactionA.status = 'transferred';
-    transactionA.transferredToFeeHead = targets[0].targetFeeHeadId;
-    transactionA.transferredToTransactionId = createdTransactions[0]._id;
-    transactionA.transferredBy = req.user?.username || 'Unknown';
-    transactionA.transferredByName = req.user?.name || 'Unknown';
-    transactionA.transferredAt = transferDate;
-    transactionA.transferRemarks = remarks || `Transferred to ${createdTransactions.length} head(s)`;
+    const targetNamesSummary = targetHeadNames.join(', ');
 
-    await transactionA.save({ session });
+    if (isPartialTransfer) {
+      // Partial transfer: update source transaction amount and retain active status
+      transactionA.amount = remainingAmount;
+      transactionA.transferredToFeeHead = targets[0].targetFeeHeadId;
+      transactionA.transferredToTransactionId = createdTransactions[0]._id;
+      transactionA.transferredBy = req.user?.username || 'Unknown';
+      transactionA.transferredByName = req.user?.name || 'Unknown';
+      transactionA.transferredAt = transferDate;
+      transactionA.transferRemarks = `Partially transferred ₹${totalTargetAmt} to ${targetNamesSummary}. Remaining ₹${remainingAmount}`;
+
+      const transferNote = `[Transferred ₹${totalTargetAmt} to ${targetNamesSummary}]`;
+      if (transactionA.remarks) {
+        if (!transactionA.remarks.includes(transferNote)) {
+          transactionA.remarks = `${transactionA.remarks} ${transferNote}`;
+        }
+      } else {
+        transactionA.remarks = transferNote;
+      }
+
+      await transactionA.save({ session });
+    } else {
+      // Full transfer: mark source transaction as transferred
+      transactionA.status = 'transferred';
+      transactionA.transferredToFeeHead = targets[0].targetFeeHeadId;
+      transactionA.transferredToTransactionId = createdTransactions[0]._id;
+      transactionA.transferredBy = req.user?.username || 'Unknown';
+      transactionA.transferredByName = req.user?.name || 'Unknown';
+      transactionA.transferredAt = transferDate;
+      transactionA.transferRemarks = remarks || `Transferred to ${createdTransactions.length} head(s): ${targetNamesSummary}`;
+
+      await transactionA.save({ session });
+    }
 
     await session.commitTransaction();
     session.endSession();
@@ -1160,7 +1207,11 @@ const transferTransaction = async (req, res) => {
     }
 
     res.json({
-      message: 'Transaction transferred successfully',
+      message: isPartialTransfer
+        ? `Successfully transferred ₹${totalTargetAmt} (₹${remainingAmount} remaining in ${sourceName})`
+        : 'Transaction transferred successfully',
+      isPartialTransfer,
+      remainingAmount,
       sourceTransaction: transactionA,
       targetTransactions: createdTransactions
     });
