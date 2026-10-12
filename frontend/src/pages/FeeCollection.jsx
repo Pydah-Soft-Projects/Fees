@@ -1486,9 +1486,12 @@ const FeeCollection = () => {
 
     const totalSelectedAmount = feeRows.reduce((acc, curr) => acc + Number(curr.amount || 0), 0);
 
-    // Filter Fee Details for Display — only up to student's current year
+    // Filter Fee Details for Display — controlled by showCardsUpToCurrentYear setting
+    const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
     const currentYear = Number(student?.current_year || 0);
-    const feeDetailsUpToCurrentYear = feeDetails.filter(f => Number(f.studentYear) <= currentYear);
+    const feeDetailsUpToCurrentYear = restrictToCurrentYear && currentYear > 0
+        ? feeDetails.filter(f => Number(f.studentYear) <= currentYear)
+        : feeDetails;
 
     const displayedFees = feeDetails.filter(f => {
         // Status filter: ACTIVE, INACTIVE, ALL
@@ -1496,9 +1499,11 @@ const FeeCollection = () => {
         if (viewFilterStatus === 'ACTIVE' && !isFeeActive) return false;
         if (viewFilterStatus === 'INACTIVE' && isFeeActive) return false;
 
-        // Exclude future years beyond student's current year
-        const currentYr = student?.current_year ? Number(student.current_year) : 4;
-        if (Number(f.studentYear) > currentYr) return false;
+        // Exclude future years beyond student's current year if restricted
+        if (restrictToCurrentYear) {
+            const currentYr = student?.current_year ? Number(student.current_year) : 4;
+            if (Number(f.studentYear) > currentYr) return false;
+        }
 
         // Year filter
         if (viewFilterYear === 'ALL') return true;
@@ -1507,14 +1512,30 @@ const FeeCollection = () => {
 
     const uniqueStudentYears = useMemo(() => {
         const years = new Set();
-        feeDetails.forEach(f => {
-            const y = Number(f.studentYear);
-            if (y) years.add(y);
-        });
         const current = Number(student?.current_year || 0);
-        for (let i = 1; i <= current; i++) years.add(i);
+        if (restrictToCurrentYear) {
+            feeDetails.forEach(f => {
+                const y = Number(f.studentYear);
+                if (y && (!current || y <= current)) years.add(y);
+            });
+            for (let i = 1; i <= current; i++) years.add(i);
+        } else {
+            const courseName = String(student?.course || '').toUpperCase();
+            let defaultCourseYears = 4;
+            if (courseName.includes('DIPLOMA') || courseName.includes('POLY') || courseName.includes('MCA') || courseName.includes('DEGREE') || courseName.includes('B.SC')) {
+                defaultCourseYears = 3;
+            } else if (courseName.includes('MBA') || courseName.includes('M.TECH') || courseName.includes('M.PHARM') || courseName.includes('PG')) {
+                defaultCourseYears = 2;
+            }
+            feeDetails.forEach(f => {
+                const y = Number(f.studentYear);
+                if (y) years.add(y);
+            });
+            const maxYear = Math.max(defaultCourseYears, current, ...years);
+            for (let i = 1; i <= maxYear; i++) years.add(i);
+        }
         return [...years].sort((a, b) => a - b);
-    }, [feeDetails, student?.current_year]);
+    }, [feeDetails, student?.current_year, student?.course, restrictToCurrentYear]);
 
     const maxTerms = useMemo(() => {
         // Always show at least T1 — non-divided fee heads are treated as Term 1
@@ -1561,7 +1582,7 @@ const FeeCollection = () => {
     const globalTotalDue = feeDetails.reduce((acc, curr) => {
         const isFeeActive = curr.isActive !== false;
         const currentYr = student?.current_year ? Number(student.current_year) : 4;
-        const isWithinCurrentYear = Number(curr.studentYear || 1) <= currentYr;
+        const isWithinCurrentYear = restrictToCurrentYear ? (Number(curr.studentYear || 1) <= currentYr) : true;
         return (isFeeActive && isWithinCurrentYear) ? acc + Number(curr.dueAmount || 0) : acc;
     }, 0);
 
@@ -1572,7 +1593,7 @@ const FeeCollection = () => {
     const globalScholarshipAmount = feeDetails.reduce((acc, curr) => {
         const isFeeActive = curr.isActive !== false;
         const currentYr = student?.current_year ? Number(student.current_year) : 4;
-        const isWithinCurrentYear = Number(curr.studentYear || 1) <= currentYr;
+        const isWithinCurrentYear = restrictToCurrentYear ? (Number(curr.studentYear || 1) <= currentYr) : true;
         return (isFeeActive && isWithinCurrentYear && isScholarshipEligible(curr)) ? acc + Number(curr.dueAmount || 0) : acc;
     }, 0);
 
@@ -1951,17 +1972,31 @@ const FeeCollection = () => {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 animate-fadeIn">
                                     {(() => {
                                         const yearWiseStats = {};
-                                        // Initialize with all years up to current
-                                        for (let i = 1; i <= (student.current_year || 1); i++) {
+                                        // Determine max year to display
+                                        let maxDisplayYear = Number(student.current_year || 1);
+                                        if (!restrictToCurrentYear) {
+                                            const courseName = String(student?.course || '').toUpperCase();
+                                            let defaultCourseYears = 4;
+                                            if (courseName.includes('DIPLOMA') || courseName.includes('POLY') || courseName.includes('MCA') || courseName.includes('DEGREE') || courseName.includes('B.SC')) {
+                                                defaultCourseYears = 3;
+                                            } else if (courseName.includes('MBA') || courseName.includes('M.TECH') || courseName.includes('M.PHARM') || courseName.includes('PG')) {
+                                                defaultCourseYears = 2;
+                                            }
+                                            const maxFeeYear = Math.max(0, ...feeDetails.map(f => Number(f.studentYear) || 0));
+                                            maxDisplayYear = Math.max(defaultCourseYears, maxFeeYear, maxDisplayYear);
+                                        }
+
+                                        // Initialize with all display years
+                                        for (let i = 1; i <= maxDisplayYear; i++) {
                                             yearWiseStats[i] = { total: 0, paid: 0, due: 0, year: i };
                                         }
 
-                                        // Add years from feeDetails — only up to the student's current year
+                                        // Add years from feeDetails
                                         feeDetails.forEach(curr => {
                                             if (curr.isActive === false) return; // Exclude inactive fees from stats cards
                                             const y = curr.studentYear;
-                                            // Skip future years beyond the student's current year
-                                            if (Number(y) > Number(student.current_year || 1)) return;
+                                            // Skip future years beyond the student's current year if restricted
+                                            if (restrictToCurrentYear && Number(y) > Number(student.current_year || 1)) return;
                                             if (!yearWiseStats[y]) yearWiseStats[y] = { total: 0, paid: 0, due: 0, year: y };
                                             yearWiseStats[y].total += Number(curr.totalAmount || 0);
                                             yearWiseStats[y].paid += Number(curr.paidAmount || 0);

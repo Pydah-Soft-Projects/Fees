@@ -17,6 +17,10 @@ const settingSchema = mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  showCardsUpToCurrentYear: {
+    type: Boolean,
+    default: true,
+  },
   maskedFeeHeads: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'FeeHead',

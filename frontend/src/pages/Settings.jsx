@@ -44,6 +44,7 @@ const Settings = () => {
         emailReportMinute: 0,
         emailReportRecipients: '',
         excessFeeHead: null,
+        showCardsUpToCurrentYear: true,
     });
     const [feeHeads, setFeeHeads] = useState([]);
     const [users, setUsers] = useState([]);
@@ -268,6 +269,7 @@ const Settings = () => {
                     { key: 'enableCashPayment',  label: 'Cash Payments',  desc: 'Allow collection of fees via physical cash.' },
                     { key: 'enableBankPayment',  label: 'Bank Payments',  desc: 'Allow collection of fees via bank transfers, DD, or cheques.' },
                     { key: 'enableSplitPayment', label: 'Split Payments', desc: 'Allow splitting a single payment across multiple methods.' },
+                    { key: 'showCardsUpToCurrentYear', label: 'Show Cards Up to Current Year Only', desc: "When enabled, fee collection cards and breakdown display years only up to the student's current year. When disabled, all years are displayed at once." },
                 ].map(({ key, label, desc }) => (
                     <div key={key} className="flex items-center justify-between py-5">
                         <div>
