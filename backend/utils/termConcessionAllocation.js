@@ -16,7 +16,10 @@ const DECLARATION_CONCESSION_REMARKS = 'Concession as per declaration';
 const isDeclarationConcessionTxn = (t) =>
   t
   && t.transactionType === 'CREDIT'
-  && String(t.remarks || '').trim() === DECLARATION_CONCESSION_REMARKS;
+  && (
+    String(t.remarks || '').trim() === DECLARATION_CONCESSION_REMARKS
+    || /^concession as per declaration$/i.test(String(t.remarks || '').trim())
+  );
 
 const roundMoney = (n) => Math.round(Number(n) || 0);
 

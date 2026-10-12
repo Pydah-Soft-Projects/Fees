@@ -563,6 +563,8 @@ const FeeCollection = () => {
                 + (data.transportRequestsMatched || 0)
                 + (data.hostelRequestsMatched || 0);
 
+            const lateFeesRemoved = Number(data.lateFeesRemoved) || 0;
+
             const detailParts = [];
             if ((data.structuresMatched || 0) > 0) {
                 detailParts.push(`Structures: ${data.structuresMatched}`);
@@ -575,16 +577,24 @@ const FeeCollection = () => {
                 const years = (data.hostelAcademicYears || []).join(', ') || '—';
                 detailParts.push(`Hostel: ${data.hostelRequestsMatched} req (${years})`);
             }
+            if (lateFeesRemoved > 0) {
+                detailParts.push(`Late Fees Removed: ${lateFeesRemoved}`);
+            }
             const details = detailParts.length ? ` — ${detailParts.join(' · ')}` : '';
 
-            if (created === 0 && updated === 0) {
+            if (created === 0 && updated === 0 && lateFeesRemoved === 0) {
                 showToastMessage(
                     `Fees already in sync (${matched} structure/request(s) matched)${details}.`,
                     'success'
                 );
+            } else if (created === 0 && updated === 0 && lateFeesRemoved > 0) {
+                showToastMessage(
+                    `Synced: ${lateFeesRemoved} late fee(s) removed (${matched} structure/request(s))${details}.`,
+                    'success'
+                );
             } else {
                 showToastMessage(
-                    `Synced: ${created} created, ${updated} updated (${matched} structure/request(s))${details}.`,
+                    `Synced: ${created} created, ${updated} updated${lateFeesRemoved > 0 ? `, ${lateFeesRemoved} late fee(s) removed` : ''} (${matched} structure/request(s))${details}.`,
                     'success'
                 );
             }

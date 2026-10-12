@@ -12,11 +12,21 @@ const {
   resolveStudentFeeAmount,
   buildFeeHeadMaps
 } = require('../utils/overallConcessionFees');
+const ServiceLateFeeConfig = require('../models/ServiceLateFeeConfig');
+const {
+  isUnderpaidThroughTerm,
+  isDeclarationConcessionTxn
+} = require('../utils/termConcessionAllocation');
+const {
+  buildStudentTermAllocation,
+  allocateServiceTermsFromTxns,
+  parseLateFeeDueDate
+} = require('../controllers/lateFeeController');
 const { applyRevisedConcessionTransactions, cancelAllDeclarationConcessionTransactions } = require('./overallConcessionRevisedService');
 
 const STUDENT_SELECT = `
   SELECT id, admission_number, student_name, current_year, batch, current_semester,
-         college, course, branch, stud_type, college_id, course_id, branch_id
+         college, course, branch, stud_type, college_id, course_id, branch_id, is_scholar_applicable
   FROM students
   WHERE admission_number = ?
 `;
@@ -520,179 +530,151 @@ const syncTransportFees = async (student, admissionNo) => {
     return { created, updated, requestsMatched: requests.length, academicYears: [] };
   }
 
-  // Sync ONLY the latest academic year's approved transport request
-  const latestByYear = new Map();
-  if (requests.length > 0) {
-    let latestAy = '';
-    for (const req of requests) {
-      const ay = String(req.academicYear || req.academic_year || '').trim();
-      if (ay) {
-        latestAy = ay;
-        break; // Found the latest academic year (requests are sorted by updated_at: -1)
-      }
+  const currentStudentYear = Number(student.current_year) || 1;
+
+  // Filter approved requests to ONLY those belonging to the student's CURRENT year of study
+  const currentYearRequests = requests.filter((req) => {
+    const reqYos = req.year_of_study !== undefined && req.year_of_study !== null
+      ? Number(req.year_of_study)
+      : (req.yearOfStudy !== undefined && req.yearOfStudy !== null ? Number(req.yearOfStudy) : null);
+
+    if (reqYos !== null && !isNaN(reqYos)) {
+      return reqYos === currentStudentYear;
     }
-    if (latestAy) {
-      const latestReq = requests.find(req => String(req.academicYear || req.academic_year || '').trim() === latestAy);
-      if (latestReq) {
-        latestByYear.set(latestAy, latestReq);
-      }
+
+    // Fallback: match by expected academic year for current student year
+    const batchYear = parseInt(String(student.batch || '').split('-')[0], 10);
+    if (!isNaN(batchYear)) {
+      const expectedStartYear = batchYear + (currentStudentYear - 1);
+      const expectedAy = `${expectedStartYear}-${expectedStartYear + 1}`;
+      const reqAy = String(req.academicYear || req.academic_year || '').trim();
+      return reqAy === expectedAy;
     }
+
+    return false;
+  });
+
+  if (currentYearRequests.length === 0) {
+    console.log(`[TransportSync] Student ${admissionNo} has no approved transport requests for current year (${currentStudentYear}). Skipping.`);
+    return { created, updated, requestsMatched: 0, academicYears: [] };
   }
 
-  if (requests.length > 0) {
-    for (const request of latestByYear.values()) {
-      const academicYear = String(request.academicYear || request.academic_year || '').trim();
-      const yearKey = academicYear;
-      academicYears.add(yearKey);
+  // Pick the latest approved request for the current year
+  const currentRequest = currentYearRequests[0];
+  const academicYear = String(currentRequest.academicYear || currentRequest.academic_year || '').trim();
+  const yearKey = academicYear;
+  academicYears.add(yearKey);
 
-      // Amount source of truth = transport request fare only (never stage/structure amount).
-      const fare = request.fare !== undefined ? request.fare : request.amount;
-      if (fare === null || fare === undefined || fare === '') {
-        console.warn(`[TransportSync] Skipping ${admissionNo} AY ${yearKey}: missing fare/amount on request`);
-        continue;
-      }
-      const amount = Number(fare);
-      if (!Number.isFinite(amount) || amount < 0) {
-        console.warn(`[TransportSync] Skipping ${admissionNo} AY ${yearKey}: invalid fare`, fare);
-        continue;
-      }
-
-      const studentYear = Number(request.year_of_study || request.yearOfStudy || student.current_year || 1) || 1;
-      const semester = Number(request.semester_number || request.semesterNumber || student.current_semester || 1) || 1;
-      const routeName = request.route_name || request.routeName || '';
-      const stageName = request.stage_name || request.stageName || '';
-      const remarks = buildTransportRemarks(routeName, stageName, academicYear);
-
-      // Find all existing transport demands for this student & academicYear
-      const existingAyDemands = await StudentFee.find({
-        studentId: admissionNo,
-        feeHead: transportFeeHead._id,
-        academicYear: yearKey
-      }).sort({ updatedAt: -1, createdAt: -1 });
-
-      if (existingAyDemands.length > 0) {
-        // Pick canonical document (prefer exact remark match if any, or latest updated)
-        const canonicalDoc = existingAyDemands.find(f => String(f.remarks || '').trim() === remarks) || existingAyDemands[0];
-
-        // Delete any extra duplicate demand rows for this academicYear FIRST to prevent E11000 index conflicts
-        const extraDocs = existingAyDemands.filter(f => f._id.toString() !== canonicalDoc._id.toString());
-        if (extraDocs.length > 0) {
-          const extraIds = extraDocs.map(f => f._id);
-          await StudentFee.deleteMany({ _id: { $in: extraIds } });
-          updated += extraDocs.length;
-        }
-
-        // Now update canonicalDoc safely without E11000 duplicate key collision
-        let changed = false;
-        if (Number(canonicalDoc.amount) !== Number(amount)) {
-          canonicalDoc.amount = amount;
-          changed = true;
-        }
-        if (canonicalDoc.remarks !== remarks) {
-          canonicalDoc.remarks = remarks;
-          changed = true;
-        }
-        if (Number(canonicalDoc.studentYear) !== Number(studentYear)) {
-          canonicalDoc.studentYear = studentYear;
-          changed = true;
-        }
-        if (semester !== undefined && normalizeSemester(canonicalDoc.semester) !== normalizeSemester(semester)) {
-          canonicalDoc.semester = semester ?? null;
-          changed = true;
-        }
-        if (student.college && canonicalDoc.college !== student.college) {
-          canonicalDoc.college = student.college;
-          changed = true;
-        }
-        if (student.course && canonicalDoc.course !== student.course) {
-          canonicalDoc.course = student.course;
-          changed = true;
-        }
-        if (student.branch && canonicalDoc.branch !== student.branch) {
-          canonicalDoc.branch = student.branch;
-          changed = true;
-        }
-        if (student.student_name && canonicalDoc.studentName !== student.student_name) {
-          canonicalDoc.studentName = student.student_name;
-          changed = true;
-        }
-        if (changed) {
-          await StudentFee.updateOne(
-            { _id: canonicalDoc._id },
-            {
-              $set: {
-                amount,
-                remarks,
-                studentYear,
-                semester: semester ?? null,
-                college: student.college || canonicalDoc.college,
-                course: student.course || canonicalDoc.course,
-                branch: student.branch || canonicalDoc.branch,
-                studentName: student.student_name || canonicalDoc.studentName,
-                updatedAt: new Date()
-              }
-            }
-          );
-          updated += 1;
-        }
-      } else {
-        const result = await upsertStudentFeeDemand({
-          admissionNo,
-          student,
-          feeHeadId: transportFeeHead._id,
-          academicYear: yearKey,
-          studentYear,
-          semester,
-          amount,
-          remarks,
-          matchByRemarks: false
-        });
-        created += result.created;
-        updated += result.updated;
-      }
-    }
+  // Amount source of truth = transport request fare only (never stage/structure amount).
+  const fare = currentRequest.fare !== undefined ? currentRequest.fare : currentRequest.amount;
+  if (fare === null || fare === undefined || fare === '') {
+    console.warn(`[TransportSync] Skipping ${admissionNo} AY ${yearKey}: missing fare/amount on request`);
+    return { created, updated, requestsMatched: currentYearRequests.length, academicYears: [] };
+  }
+  const amount = Number(fare);
+  if (!Number.isFinite(amount) || amount < 0) {
+    console.warn(`[TransportSync] Skipping ${admissionNo} AY ${yearKey}: invalid fare`, fare);
+    return { created, updated, requestsMatched: currentYearRequests.length, academicYears: [] };
   }
 
-  // Drop any obsolete or duplicate transport demands for this student for each academic year.
-  const existingTransportFees = await StudentFee.find({
+  const studentYear = currentStudentYear;
+  const semester = Number(currentRequest.semester_number || currentRequest.semesterNumber || student.current_semester || 1) || 1;
+  const routeName = currentRequest.route_name || currentRequest.routeName || '';
+  const stageName = currentRequest.stage_name || currentRequest.stageName || '';
+  const remarks = buildTransportRemarks(routeName, stageName, academicYear);
+
+  // Find all existing transport demands for this student & academicYear
+  const existingAyDemands = await StudentFee.find({
     studentId: admissionNo,
-    feeHead: transportFeeHead._id
+    feeHead: transportFeeHead._id,
+    academicYear: yearKey
   }).sort({ updatedAt: -1, createdAt: -1 });
 
-  const feesByAy = new Map();
-  for (const fee of existingTransportFees) {
-    const feeAy = String(fee.academicYear || '').trim();
-    if (!feesByAy.has(feeAy)) feesByAy.set(feeAy, []);
-    feesByAy.get(feeAy).push(fee);
-  }
+  if (existingAyDemands.length > 0) {
+    // Pick canonical document (prefer exact remark match if any, or latest updated)
+    const canonicalDoc = existingAyDemands.find(f => String(f.remarks || '').trim() === remarks) || existingAyDemands[0];
 
-  // Clean up duplicate demand documents within the synced latest academic year if needed
-  for (const [feeAy, approvedReq] of latestByYear.entries()) {
-    const feeList = feesByAy.get(feeAy);
-    if (feeList && feeList.length > 1) {
-      const expectedRemarks = buildTransportRemarks(
-        approvedReq.route_name || approvedReq.routeName,
-        approvedReq.stage_name || approvedReq.stageName,
-        feeAy
-      );
-
-      let canonicalDoc = feeList.find(f => String(f.remarks || '').trim() === expectedRemarks) || feeList[0];
-
-      // Delete redundant duplicate demand documents for this AY
-      for (const fee of feeList) {
-        if (fee._id.toString() !== canonicalDoc._id.toString()) {
-          await StudentFee.deleteOne({ _id: fee._id });
-          updated += 1;
-          console.log(`[TransportSync] Cleaned up duplicate Transport Fee demand ID: ${fee._id} (AY: ${feeAy})`);
-        }
-      }
+    // Delete any extra duplicate demand rows for this academicYear FIRST to prevent E11000 index conflicts
+    const extraDocs = existingAyDemands.filter(f => f._id.toString() !== canonicalDoc._id.toString());
+    if (extraDocs.length > 0) {
+      const extraIds = extraDocs.map(f => f._id);
+      await StudentFee.deleteMany({ _id: { $in: extraIds } });
+      updated += extraDocs.length;
     }
+
+    // Now update canonicalDoc safely without E11000 duplicate key collision
+    let changed = false;
+    if (Number(canonicalDoc.amount) !== Number(amount)) {
+      canonicalDoc.amount = amount;
+      changed = true;
+    }
+    if (canonicalDoc.remarks !== remarks) {
+      canonicalDoc.remarks = remarks;
+      changed = true;
+    }
+    if (Number(canonicalDoc.studentYear) !== Number(studentYear)) {
+      canonicalDoc.studentYear = studentYear;
+      changed = true;
+    }
+    if (semester !== undefined && normalizeSemester(canonicalDoc.semester) !== normalizeSemester(semester)) {
+      canonicalDoc.semester = semester ?? null;
+      changed = true;
+    }
+    if (student.college && canonicalDoc.college !== student.college) {
+      canonicalDoc.college = student.college;
+      changed = true;
+    }
+    if (student.course && canonicalDoc.course !== student.course) {
+      canonicalDoc.course = student.course;
+      changed = true;
+    }
+    if (student.branch && canonicalDoc.branch !== student.branch) {
+      canonicalDoc.branch = student.branch;
+      changed = true;
+    }
+    if (student.student_name && canonicalDoc.studentName !== student.student_name) {
+      canonicalDoc.studentName = student.student_name;
+      changed = true;
+    }
+    if (changed) {
+      await StudentFee.updateOne(
+        { _id: canonicalDoc._id },
+        {
+          $set: {
+            amount,
+            remarks,
+            studentYear,
+            semester: semester ?? null,
+            college: student.college || canonicalDoc.college,
+            course: student.course || canonicalDoc.course,
+            branch: student.branch || canonicalDoc.branch,
+            studentName: student.student_name || canonicalDoc.studentName,
+            updatedAt: new Date()
+          }
+        }
+      );
+      updated += 1;
+    }
+  } else {
+    const result = await upsertStudentFeeDemand({
+      admissionNo,
+      student,
+      feeHeadId: transportFeeHead._id,
+      academicYear: yearKey,
+      studentYear,
+      semester,
+      amount,
+      remarks,
+      matchByRemarks: false
+    });
+    created += result.created;
+    updated += result.updated;
   }
 
   return {
     created,
     updated,
-    requestsMatched: requests.length,
+    requestsMatched: currentYearRequests.length,
     academicYears: Array.from(academicYears).sort()
   };
 };
@@ -1032,12 +1014,295 @@ const fetchStudentByAdmissionNumber = async (admissionNo) => {
   return student;
 };
 
+const checkScholarshipEligible = async (studentId, targetYear, targetSem, isScholarApplicable) => {
+  if (!studentId) return !!isScholarApplicable;
+  try {
+    const [scholarships] = await db.query(`
+      SELECT student_year, student_semester, eligible 
+      FROM student_scholarship 
+      WHERE student_id = ?
+    `, [studentId]);
+
+    if (!scholarships || scholarships.length === 0) {
+      return !!isScholarApplicable;
+    }
+
+    const currentYearRecords = scholarships.filter(r => Number(r.student_year) === Number(targetYear));
+    if (currentYearRecords.length > 0) {
+      if (targetSem) {
+        const semMatch = currentYearRecords.find(r => Number(r.student_semester) === Number(targetSem));
+        if (semMatch) return String(semMatch.eligible).toLowerCase() === 'eligible';
+        const yearlyMatch = currentYearRecords.find(r => r.student_semester === null);
+        if (yearlyMatch) return String(yearlyMatch.eligible).toLowerCase() === 'eligible';
+        return false;
+      } else {
+        return currentYearRecords.some(r => String(r.eligible).toLowerCase() === 'eligible');
+      }
+    } else {
+      const prevYear = Number(targetYear) - 1;
+      if (prevYear > 0) {
+        const prevYearMatch = scholarships.find(r => Number(r.student_year) === prevYear && Number(r.student_semester) === 2);
+        if (prevYearMatch) return String(prevYearMatch.eligible).toLowerCase() === 'eligible';
+        const prevYearYearlyMatch = scholarships.find(r => Number(r.student_year) === prevYear && r.student_semester === null);
+        if (prevYearYearlyMatch) return String(prevYearYearlyMatch.eligible).toLowerCase() === 'eligible';
+      }
+      return !!isScholarApplicable;
+    }
+  } catch (err) {
+    console.error('[FeeSync] Error checking scholarship eligibility:', err?.message || err);
+    return !!isScholarApplicable;
+  }
+};
+
+/**
+ * Re-evaluate existing late fee demands for this student.
+ * If active transactions exist with paymentDate <= dueDate that satisfy the term balance,
+ * remove the late fee demand (unless student has already paid towards the late fee).
+ */
+const syncLateFees = async (student, admissionNo) => {
+  try {
+    const lateFees = await StudentFee.find({
+      studentId: admissionNo,
+      isActive: { $ne: false }
+    }).populate('feeHead').populate('structureId');
+
+    const candidateLateFees = lateFees.filter((fee) => {
+      const remarks = String(fee.remarks || '');
+      if (/\|\s*Due:\s*/i.test(remarks)) return true;
+      if (/late\s*fee/i.test(remarks) || /condonation/i.test(remarks)) return true;
+      const headName = String(fee.feeHead?.name || '');
+      const headCode = String(fee.feeHead?.code || '');
+      if ((/late/i.test(headName) || /late/i.test(headCode) || /condonation/i.test(headName)) && fee.termNumber) {
+        return true;
+      }
+      return false;
+    });
+
+    if (candidateLateFees.length === 0) {
+      return { evaluated: 0, removed: 0 };
+    }
+
+    let removedCount = 0;
+    let evaluatedCount = 0;
+
+    for (const lateFee of candidateLateFees) {
+      evaluatedCount++;
+
+      // Safety: Never delete a late fee that has already been paid
+      const lateFeeHeadId = lateFee.feeHead?._id || lateFee.feeHead;
+      const lateFeePaidTxns = await Transaction.find({
+        studentId: admissionNo,
+        feeHead: lateFeeHeadId,
+        studentYear: studentYearQuery(lateFee.studentYear),
+        status: 'active',
+        transactionType: 'DEBIT'
+      }).lean();
+
+      const lateFeePaid = lateFeePaidTxns.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+      if (lateFeePaid > 0) {
+        // Late fee has already been paid by the student; keep it
+        continue;
+      }
+
+      // Determine due date from remarks or structure
+      let dueDate = parseLateFeeDueDate(lateFee.remarks);
+
+      if (!dueDate && lateFee.structureId) {
+        const struct = lateFee.structureId;
+        const termObj = (struct.terms || []).find(t => Number(t.termNumber) === Number(lateFee.termNumber));
+        if (termObj?.fixedDueDate) {
+          dueDate = new Date(termObj.fixedDueDate);
+          dueDate.setHours(23, 59, 59, 999);
+        }
+      }
+
+      if (!dueDate || isNaN(dueDate.getTime())) {
+        // Cannot determine due date reliably; skip deletion for safety
+        continue;
+      }
+
+      const termNum = lateFee.termNumber || 1;
+      const remarks = String(lateFee.remarks || '');
+
+      // Case A: Service Late Fee (Hostel / Transport)
+      const isHostel = /hostel/i.test(remarks);
+      const isTransport = /transport/i.test(remarks) || /bus/i.test(remarks);
+
+      if (isHostel || isTransport) {
+        const serviceType = isHostel ? 'HOSTEL' : 'TRANSPORT';
+        const serviceConfig = await ServiceLateFeeConfig.findOne({
+          type: serviceType,
+          academicYear: lateFee.academicYear || student?.batch,
+          isActive: { $ne: false }
+        }).populate('applicableFeeHead').lean() || await ServiceLateFeeConfig.findOne({
+          type: serviceType,
+          isActive: { $ne: false }
+        }).sort({ createdAt: -1 }).populate('applicableFeeHead').lean();
+
+        let applicableHeadId = serviceConfig?.applicableFeeHead?._id || serviceConfig?.applicableFeeHead;
+        if (!applicableHeadId) {
+          const headDoc = await FeeHead.findOne(
+            isHostel ? { $or: [{ code: 'HOSTEL' }, { name: /hostel/i }] } : { $or: [{ code: 'TRANSPORT' }, { name: /transport/i }] }
+          ).lean();
+          if (headDoc) applicableHeadId = headDoc._id;
+        }
+
+        if (!applicableHeadId) continue;
+
+        const serviceDemands = await StudentFee.find({
+          studentId: admissionNo,
+          feeHead: applicableHeadId,
+          studentYear: studentYearQuery(lateFee.studentYear),
+          isActive: { $ne: false }
+        }).lean();
+
+        const demandTotal = serviceDemands.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
+
+        const serviceTxns = await Transaction.find({
+          studentId: admissionNo,
+          feeHead: applicableHeadId,
+          studentYear: studentYearQuery(lateFee.studentYear),
+          status: 'active'
+        }).lean();
+
+        const cutoffTime = dueDate.getTime();
+        const onTimeTxns = serviceTxns.filter((t) => {
+          if (isDeclarationConcessionTxn(t)) return true;
+          const pDate = t.paymentDate || t.createdAt;
+          if (!pDate) return false;
+          const tTime = new Date(pDate).getTime();
+          return !isNaN(tTime) && tTime <= cutoffTime;
+        });
+
+        const defaultTerms = serviceConfig?.defaultTerms || [{ termNumber: 1, percentage: 100 }];
+        const allocation = allocateServiceTermsFromTxns({
+          txns: onTimeTxns,
+          defaultTerms,
+          demandTotal
+        });
+
+        const isUnderpaid = isUnderpaidThroughTerm(allocation, termNum);
+        if (!isUnderpaid) {
+          await StudentFee.findByIdAndDelete(lateFee._id);
+          removedCount++;
+        }
+        continue;
+      }
+
+      // Case B: Group-Wise Academic Late Fee
+      const isGroupWise = remarks.startsWith('Group Late Fee') || lateFee.structureId?.isGroupWiseLateFee;
+
+      if (isGroupWise) {
+        let groupStructs = [];
+        if (lateFee.structureId) {
+          const target = lateFee.structureId;
+          groupStructs = await FeeStructure.find({
+            college: target.college,
+            course: target.course,
+            branch: target.branch,
+            batch: target.batch,
+            category: target.category,
+            studentYear: target.studentYear,
+            semester: target.semester || null,
+            isGroupWiseLateFee: true
+          }).populate('feeHead');
+        } else if (student) {
+          groupStructs = await FeeStructure.find({
+            college: student.college,
+            course: student.course,
+            branch: student.branch,
+            batch: student.batch,
+            category: student.stud_type,
+            studentYear: lateFee.studentYear,
+            semester: lateFee.semester || null,
+            isGroupWiseLateFee: true
+          }).populate('feeHead');
+        }
+
+        if (groupStructs.length === 0) continue;
+
+        let anyUnderpaid = false;
+        for (const struct of groupStructs) {
+          const targetSem = struct.semester || (termNum === 1 ? 1 : 2);
+          if (struct.isScholarshipApplicable && student) {
+            const isEligible = await checkScholarshipEligible(
+              student.id,
+              struct.studentYear,
+              targetSem,
+              student.is_scholar_applicable
+            );
+            if (isEligible) continue;
+          }
+
+          const allocation = await buildStudentTermAllocation(admissionNo, struct, dueDate);
+          if (isUnderpaidThroughTerm(allocation, termNum)) {
+            anyUnderpaid = true;
+            break;
+          }
+        }
+
+        if (!anyUnderpaid) {
+          await StudentFee.findByIdAndDelete(lateFee._id);
+          removedCount++;
+        }
+        continue;
+      }
+
+      // Case C: Single Academic Structure Late Fee
+      let struct = lateFee.structureId;
+      if (!struct && student) {
+        const structures = await FeeStructure.find({
+          college: student.college,
+          course: student.course,
+          branch: student.branch,
+          batch: student.batch,
+          studentYear: lateFee.studentYear,
+          category: student.stud_type
+        }).populate('feeHead');
+        struct = structures.find(s => s.feeHead?.name && remarks.includes(s.feeHead.name)) || structures[0];
+      }
+
+      if (!struct) continue;
+
+      const targetSem = struct.semester || (termNum === 1 ? 1 : 2);
+      if (struct.isScholarshipApplicable && student) {
+        const isEligible = await checkScholarshipEligible(
+          student.id,
+          struct.studentYear,
+          targetSem,
+          student.is_scholar_applicable
+        );
+        if (isEligible) {
+          // Exempt from tuition late fee
+          await StudentFee.findByIdAndDelete(lateFee._id);
+          removedCount++;
+          continue;
+        }
+      }
+
+      const allocation = await buildStudentTermAllocation(admissionNo, struct, dueDate);
+      const isUnderpaid = isUnderpaidThroughTerm(allocation, termNum);
+
+      if (!isUnderpaid) {
+        await StudentFee.findByIdAndDelete(lateFee._id);
+        removedCount++;
+      }
+    }
+
+    return { evaluated: evaluatedCount, removed: removedCount };
+  } catch (err) {
+    console.error(`[FeeSync] Error during late fee sync for ${admissionNo}:`, err?.message || err);
+    return { evaluated: 0, removed: 0, error: err?.message };
+  }
+};
+
 const syncStudentFeesByAdmissionNumber = async (admissionNo, options = {}) => {
   const {
     skipClub = false,
     skipTransport = false,
     skipHostel = false,
-    skipStandard = false
+    skipStandard = false,
+    skipLateFee = false
   } = options;
 
   const student = await fetchStudentByAdmissionNumber(admissionNo);
@@ -1059,6 +1324,9 @@ const syncStudentFeesByAdmissionNumber = async (admissionNo, options = {}) => {
   const standardResult = skipStandard
     ? { created: 0, updated: 0, structuresMatched: 0 }
     : await syncStandardFees(student, admissionNo);
+  const lateFeeResult = skipLateFee
+    ? { evaluated: 0, removed: 0 }
+    : await syncLateFees(student, admissionNo);
 
   return {
     admissionNumber: admissionNo,
@@ -1073,7 +1341,9 @@ const syncStudentFeesByAdmissionNumber = async (admissionNo, options = {}) => {
     hostelAcademicYears: hostelResult.academicYears || [],
     standardFeesCreated: standardResult.created,
     standardFeesUpdated: standardResult.updated,
-    structuresMatched: standardResult.structuresMatched
+    structuresMatched: standardResult.structuresMatched,
+    lateFeesEvaluated: lateFeeResult.evaluated || 0,
+    lateFeesRemoved: lateFeeResult.removed || 0
   };
 };
 
@@ -1086,7 +1356,8 @@ const syncAllRegularStudentFees = async ({
   skipTransport = true,
   skipHostel = true,
   skipClub = false,
-  skipStandard = false
+  skipStandard = false,
+  skipLateFee = false
 } = {}) => {
   let students = [];
   try {
@@ -1108,7 +1379,7 @@ const syncAllRegularStudentFees = async ({
   let success = 0;
   let failed = 0;
   const limit = Math.max(1, Number(concurrency) || 5);
-  const syncOptions = { skipTransport, skipHostel, skipClub, skipStandard };
+  const syncOptions = { skipTransport, skipHostel, skipClub, skipStandard, skipLateFee };
 
   console.log(
     `[FeeSync] Starting nightly student fee sync for ${total} regular student(s)` +
@@ -1148,6 +1419,7 @@ module.exports = {
   syncTransportFees,
   syncHostelFees,
   syncStandardFees,
+  syncLateFees,
   syncStudentFeesByAdmissionNumber,
   syncAllRegularStudentFees,
   loadRevisedFeesMapForStudent,

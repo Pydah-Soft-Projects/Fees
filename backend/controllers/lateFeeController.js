@@ -47,12 +47,62 @@ const buildLateFeeRemarks = (base, dueDate, options = {}) => {
 /**
  * Build term allocation for one student + fee structure (paid + declaration even + application waterfall).
  */
-const buildStudentTermAllocation = async (studentId, struct) => {
+const parseLateFeeDueDate = (remarks) => {
+  if (!remarks) return null;
+  const match = String(remarks).match(/\|\s*Due:\s*([^|\n\r]+)/i);
+  if (!match) return null;
+  const dateStr = match[1].trim();
+
+  // Pattern 1: DD-Mon-YYYY (e.g. 10-Aug-2026)
+  const monMatch = dateStr.match(/^(\d{1,2})-([A-Za-z]{3,9})-(\d{4})$/);
+  if (monMatch) {
+    const day = parseInt(monMatch[1], 10);
+    const monStr = monMatch[2].toLowerCase().slice(0, 3);
+    const year = parseInt(monMatch[3], 10);
+    const months = {
+      jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+      jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+    };
+    if (months[monStr] !== undefined) {
+      const d = new Date(year, months[monStr], day, 23, 59, 59, 999);
+      if (!isNaN(d.getTime())) return d;
+    }
+  }
+
+  // Pattern 2: YYYY-MM-DD
+  const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    const d = new Date(parseInt(isoMatch[1], 10), parseInt(isoMatch[2], 10) - 1, parseInt(isoMatch[3], 10), 23, 59, 59, 999);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // Pattern 3: DD/MM/YYYY or DD-MM-YYYY
+  const dmyMatch = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmyMatch) {
+    const d = new Date(parseInt(dmyMatch[3], 10), parseInt(dmyMatch[2], 10) - 1, parseInt(dmyMatch[1], 10), 23, 59, 59, 999);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  const fallback = new Date(dateStr);
+  if (!isNaN(fallback.getTime())) {
+    fallback.setHours(23, 59, 59, 999);
+    return fallback;
+  }
+
+  return null;
+};
+
+/**
+ * Build term allocation for one student + fee structure (paid + declaration even + application waterfall).
+ * Supports optional cutoffDate (end of due date) to evaluate whether payments were made on or before due date.
+ */
+const buildStudentTermAllocation = async (studentId, struct, cutoffDate = null) => {
   const feeHeadId = struct.feeHead?._id || struct.feeHead;
+  const yearQuery = { $in: [Number(struct.studentYear), String(struct.studentYear)] };
   const txnFilter = {
     studentId,
     feeHead: feeHeadId,
-    studentYear: struct.studentYear,
+    studentYear: yearQuery,
     status: 'active'
   };
   // Match semester loosely — null demand vs "1" txns still apply to this year head
@@ -66,7 +116,23 @@ const buildStudentTermAllocation = async (studentId, struct) => {
     ];
   }
 
-  const txns = await Transaction.find(txnFilter).lean();
+  let txns = await Transaction.find(txnFilter).lean();
+
+  if (cutoffDate) {
+    const cutoffTime = cutoffDate instanceof Date ? cutoffDate.getTime() : new Date(cutoffDate).getTime();
+    if (!isNaN(cutoffTime)) {
+      txns = txns.filter((t) => {
+        // Concession declaration transactions for that year apply regardless of transaction date
+        if (isDeclarationConcessionTxn(t)) {
+          return true;
+        }
+        const pDate = t.paymentDate || t.createdAt;
+        if (!pDate) return false;
+        const tTime = new Date(pDate).getTime();
+        return !isNaN(tTime) && tTime <= cutoffTime;
+      });
+    }
+  }
 
   let paidAmount = 0;
   let declarationConcession = 0;
@@ -84,7 +150,7 @@ const buildStudentTermAllocation = async (studentId, struct) => {
   const demandFilter = {
     studentId,
     feeHead: feeHeadId,
-    studentYear: String(struct.studentYear)
+    studentYear: yearQuery
   };
   const demands = await StudentFee.find(demandFilter).lean();
   const demandTotal = demands.reduce((sum, d) => sum + (Number(d.amount) || 0), 0);
@@ -518,7 +584,7 @@ const processLateFees = async (req, res) => {
                 log(`[SCHOLARSHIP] Skipping underpayment check for group structure ${struct.feeHead?.name || 'Group Head'} (Year ${struct.studentYear}, Sem ${targetSem || 'Yearly'}, Term ${term.termNumber}) for student ${student.admission_number} due to scholarship eligibility`);
                 continue;
               }
-              const allocation = await buildStudentTermAllocation(student.admission_number, struct);
+              const allocation = await buildStudentTermAllocation(student.admission_number, struct, dueDate);
               if (isUnderpaidThroughTerm(allocation, term.termNumber)) {
                 anyUnderpaid = true;
                 break;
@@ -538,7 +604,7 @@ const processLateFees = async (req, res) => {
             if (skipDueToCheck) {
               isUnderpaid = false;
             } else {
-              const allocation = await buildStudentTermAllocation(student.admission_number, firstStruct);
+              const allocation = await buildStudentTermAllocation(student.admission_number, firstStruct, dueDate);
               isUnderpaid = isUnderpaidThroughTerm(allocation, term.termNumber);
             }
             remarksBase = `${firstStruct.feeHead.name} - ${term.dueDescription || `Term ${term.termNumber}`} - ₹${term.lateFeeAmount}`;
@@ -1427,5 +1493,9 @@ module.exports = {
   saveServiceLateFeeConfig,
   saveServiceLateFeeRule,
   deleteServiceLateFeeRule,
-  deleteServiceLateFeeConfig
+  deleteServiceLateFeeConfig,
+  buildStudentTermAllocation,
+  allocateServiceTermsFromTxns,
+  parseLateFeeDueDate,
+  stripLateFeeDateSuffix
 };
