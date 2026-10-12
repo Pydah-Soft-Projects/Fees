@@ -120,7 +120,7 @@ const processBulkUpload = async (req, res) => {
             if ((head === 'CATEGORY' || head === 'TYPE' || head === 'STUDENTTYPE' || head === 'STUDTYPE') && !isFeeKeyword) {
                 if (colMap.CATEGORY === undefined) colMap.CATEGORY = i;
             }
-            if ((head.includes('DATE') || head.includes('PAYDATE') || head.includes('TRANSDATE') || head.includes('RCPTDATE') || head.includes('PAYMENTDATE')) && colMap.DATE === undefined) {
+            if ((head.includes('DATE') || head.includes('PAYDATE') || head.includes('TRANSDATE') || head.includes('TXNDATE') || head.includes('RCPTDATE') || head.includes('PAYMENTDATE')) && colMap.DATE === undefined) {
                 colMap.DATE = i;
             }
             if ((head.includes('MODE') || head.includes('PAYMODE') || head.includes('PAYMENTMODE')) && colMap.MODE === undefined) {
@@ -518,11 +518,11 @@ const processBulkUpload = async (req, res) => {
             return (!isNaN(n) && n >= 1 && n <= 4) ? n : 1;
         };
         const parseDate = (xlsDate) => {
-            if (!xlsDate) return new Date();
+            if (!xlsDate && xlsDate !== 0) return new Date();
 
             if (xlsDate instanceof Date) {
                 if (isNaN(xlsDate.getTime())) return new Date();
-                return new Date(Date.UTC(xlsDate.getFullYear(), xlsDate.getMonth(), xlsDate.getDate(), 12, 0, 0));
+                return new Date(Date.UTC(xlsDate.getUTCFullYear(), xlsDate.getUTCMonth(), xlsDate.getUTCDate(), 12, 0, 0));
             }
             
             if (typeof xlsDate === 'number') {
@@ -534,28 +534,52 @@ const processBulkUpload = async (req, res) => {
             const s = String(xlsDate).trim();
             if (!s) return new Date();
 
-            // Handle ISO strings with 'T' (e.g. from frontend preview)
+            // Handle ISO strings with 'T' (e.g. from frontend preview "2026-05-06T12:00:00.000Z")
             if (s.includes('T')) {
                 const attempt = new Date(s);
                 if (!isNaN(attempt.getTime())) {
-                    return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                    return new Date(Date.UTC(attempt.getUTCFullYear(), attempt.getUTCMonth(), attempt.getUTCDate(), 12, 0, 0));
                 }
             }
 
-            // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (or D/M/YYYY or YYYY/MM/DD)
+            const monthNames = {
+                jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+                jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+            };
+
+            // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (e.g. 22/04/2026, 15/04/2026)
             if (s.includes('/')) {
                 const datePart = s.split(' ')[0];
                 const parts = datePart.split('/');
                 if (parts.length >= 3) {
-                    const first = parseInt(parts[0], 10);
-                    const second = parseInt(parts[1], 10);
-                    let third = parseInt(parts[2], 10);
+                    const p0 = parts[0].trim();
+                    const p1 = parts[1].trim();
+                    const p2 = parts[2].trim();
+
+                    const first = parseInt(p0, 10);
+                    const second = parseInt(p1, 10);
+                    let third = parseInt(p2, 10);
+
+                    // Month name check (e.g. 22/Apr/2026)
+                    const mKey = p1.toLowerCase().slice(0, 3);
+                    if (monthNames[mKey] !== undefined) {
+                        let year = third;
+                        if (year < 100) year += 2000;
+                        return new Date(Date.UTC(year, monthNames[mKey], first, 12, 0, 0));
+                    }
 
                     if (first > 1000) {
                         // YYYY/MM/DD format
                         const year = first;
                         const month = second - 1;
                         const day = third;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+                    } else if (second > 12 && first <= 12) {
+                        // MM/DD/YYYY fallback if second > 12 (second must be day)
+                        const month = first - 1;
+                        const day = second;
+                        let year = third;
+                        if (year < 100) year += 2000;
                         return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // DD/MM/YYYY format: first = Day, second = Month
@@ -568,20 +592,40 @@ const processBulkUpload = async (req, res) => {
                 }
             }
 
-            // 2. Hyphens (-) -> MM-DD-YYYY (or YYYY-MM-DD if ISO)
+            // 2. Hyphens (-) -> MM-DD-YYYY (e.g. 05-06-2026 -> 6th May 2026)
             if (s.includes('-')) {
                 const datePart = s.split('T')[0].split(' ')[0];
                 const parts = datePart.split('-');
                 if (parts.length >= 3) {
-                    const first = parseInt(parts[0], 10);
-                    const second = parseInt(parts[1], 10);
-                    let third = parseInt(parts[2], 10);
+                    const p0 = parts[0].trim();
+                    const p1 = parts[1].trim();
+                    const p2 = parts[2].trim();
+
+                    const first = parseInt(p0, 10);
+                    const second = parseInt(p1, 10);
+                    let third = parseInt(p2, 10);
+
+                    // Month name check (e.g. 05-May-2026, 22-Apr-2026)
+                    const mKey = p1.toLowerCase().slice(0, 3);
+                    if (monthNames[mKey] !== undefined) {
+                        let year = third;
+                        if (year < 100) year += 2000;
+                        return new Date(Date.UTC(year, monthNames[mKey], first, 12, 0, 0));
+                    }
 
                     if (first > 1000) {
                         // ISO format YYYY-MM-DD
                         const year = first;
                         const month = second - 1;
                         const day = third;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+                    } else if (first > 12 && second <= 12) {
+                        // Safeguard: If first > 12 (e.g. 22-04-2026), first CANNOT be month!
+                        // Must be DD-MM-YYYY (day = 22, month = 04)
+                        const day = first;
+                        const month = second - 1;
+                        let year = third;
+                        if (year < 100) year += 2000;
                         return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // Hyphens (-) are strictly MM-DD-YYYY
@@ -596,7 +640,7 @@ const processBulkUpload = async (req, res) => {
 
             const attempt = new Date(s);
             if (!isNaN(attempt.getTime())) {
-                return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                return new Date(Date.UTC(attempt.getUTCFullYear(), attempt.getUTCMonth(), attempt.getUTCDate(), 12, 0, 0));
             }
             return new Date();
         };
@@ -632,7 +676,19 @@ const processBulkUpload = async (req, res) => {
             let balAmtCol = -1;
             let recpNoCol = -1;
 
-            row0.forEach((cell, idx) => {
+            // Dynamically detect header row in top 15 rows
+            let headerRow = row0;
+            for (let r = 0; r < Math.min(rawData.length, 15); r++) {
+                const rRow = rawData[r];
+                if (!rRow || !Array.isArray(rRow)) continue;
+                const rText = rRow.map(c => c ? String(c).toUpperCase().trim().replace(/[^A-Z0-9]/g, '') : '').join(' ');
+                if (rText.includes('TRANSDATE') || (rText.includes('FEETYPE') && (rText.includes('AMT') || rText.includes('CRAMT')))) {
+                    headerRow = rRow;
+                    break;
+                }
+            }
+
+            headerRow.forEach((cell, idx) => {
                 if (!cell) return;
                 const h = String(cell).toUpperCase().trim();
                 const clean = h.replace(/[^A-Z0-9]/g, '');
@@ -797,7 +853,17 @@ const processBulkUpload = async (req, res) => {
                     }
                 }
 
-                const transDate = transDateCol !== -1 && row[transDateCol] ? parseDate(row[transDateCol]) : new Date();
+                // Read formatted cell text (cell.w) from Excel if available to preserve '/' and '-'
+                let rawDateVal = transDateCol !== -1 ? row[transDateCol] : null;
+                if (sheet && transDateCol !== -1) {
+                    try {
+                        const cellAddr = xlsx.utils.encode_cell({ r: r, c: transDateCol });
+                        if (sheet[cellAddr] && sheet[cellAddr].w) {
+                            rawDateVal = sheet[cellAddr].w;
+                        }
+                    } catch (e) {}
+                }
+                const transDate = rawDateVal ? parseDate(rawDateVal) : new Date();
                 const payMode = 'Cash'; // User explicitly specified: Always set payment mode to 'Cash'
 
                 const canonId = currentStudent.canonId;
@@ -1022,7 +1088,16 @@ const processBulkUpload = async (req, res) => {
 
                         const rawMode = colMap.MODE !== undefined ? String(row[colMap.MODE] || '').trim().toLowerCase() : '';
                         const payMode = rawMode.includes('bank') ? 'Bank' : 'Cash';
-                        const transDate = colMap.DATE !== undefined ? parseDate(row[colMap.DATE]) : new Date();
+                        let rawDateVal = colMap.DATE !== undefined ? row[colMap.DATE] : null;
+                        if (sheet && colMap.DATE !== undefined) {
+                            try {
+                                const cellAddr = xlsx.utils.encode_cell({ r: r, c: colMap.DATE });
+                                if (sheet[cellAddr] && sheet[cellAddr].w) {
+                                    rawDateVal = sheet[cellAddr].w;
+                                }
+                            } catch (e) {}
+                        }
+                        const transDate = rawDateVal ? parseDate(rawDateVal) : new Date();
                         const ref = colMap.REF !== undefined ? String(row[colMap.REF] || '').trim() : '';
                         const narration = colMap.NARRATION !== undefined ? String(row[colMap.NARRATION] || '').trim() : '';
 
@@ -1065,7 +1140,16 @@ const processBulkUpload = async (req, res) => {
                             payMode = 'Cash';
                         }
 
-                        const transDate = colMap.DATE !== undefined ? parseDate(row[colMap.DATE]) : new Date();
+                        let rawDateVal = colMap.DATE !== undefined ? row[colMap.DATE] : null;
+                        if (sheet && colMap.DATE !== undefined) {
+                            try {
+                                const cellAddr = xlsx.utils.encode_cell({ r: r, c: colMap.DATE });
+                                if (sheet[cellAddr] && sheet[cellAddr].w) {
+                                    rawDateVal = sheet[cellAddr].w;
+                                }
+                            } catch (e) {}
+                        }
+                        const transDate = rawDateVal ? parseDate(rawDateVal) : new Date();
                         const narration = colMap.NARRATION !== undefined ? String(row[colMap.NARRATION] || '').trim() : '';
 
                         entry.payments.push({
@@ -1343,11 +1427,11 @@ const saveBulkData = async (req, res) => {
         // For now, we'll remove the aggregation and map, as they are not used in the current logic.
 
         const parseDate = (val) => {
-            if (!val) return new Date();
+            if (!val && val !== 0) return new Date();
 
             if (val instanceof Date) {
                 if (isNaN(val.getTime())) return new Date();
-                return new Date(Date.UTC(val.getFullYear(), val.getMonth(), val.getDate(), 12, 0, 0));
+                return new Date(Date.UTC(val.getUTCFullYear(), val.getUTCMonth(), val.getUTCDate(), 12, 0, 0));
             }
             
             if (typeof val === 'number') {
@@ -1359,28 +1443,52 @@ const saveBulkData = async (req, res) => {
             const s = String(val).trim();
             if (!s) return new Date();
 
-            // Handle ISO strings with 'T' (e.g. from frontend preview)
+            // Handle ISO strings with 'T' (e.g. from frontend preview "2026-05-06T12:00:00.000Z")
             if (s.includes('T')) {
                 const attempt = new Date(s);
                 if (!isNaN(attempt.getTime())) {
-                    return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                    return new Date(Date.UTC(attempt.getUTCFullYear(), attempt.getUTCMonth(), attempt.getUTCDate(), 12, 0, 0));
                 }
             }
 
-            // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (or D/M/YYYY or YYYY/MM/DD)
+            const monthNames = {
+                jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+                jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+            };
+
+            // 1. Slashes (/) -> STRICTLY DD/MM/YYYY (e.g. 22/04/2026, 15/04/2026)
             if (s.includes('/')) {
                 const datePart = s.split(' ')[0];
                 const parts = datePart.split('/');
                 if (parts.length >= 3) {
-                    const first = parseInt(parts[0], 10);
-                    const second = parseInt(parts[1], 10);
-                    let third = parseInt(parts[2], 10);
+                    const p0 = parts[0].trim();
+                    const p1 = parts[1].trim();
+                    const p2 = parts[2].trim();
+
+                    const first = parseInt(p0, 10);
+                    const second = parseInt(p1, 10);
+                    let third = parseInt(p2, 10);
+
+                    // Month name check (e.g. 22/Apr/2026)
+                    const mKey = p1.toLowerCase().slice(0, 3);
+                    if (monthNames[mKey] !== undefined) {
+                        let year = third;
+                        if (year < 100) year += 2000;
+                        return new Date(Date.UTC(year, monthNames[mKey], first, 12, 0, 0));
+                    }
 
                     if (first > 1000) {
                         // YYYY/MM/DD format
                         const year = first;
                         const month = second - 1;
                         const day = third;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+                    } else if (second > 12 && first <= 12) {
+                        // MM/DD/YYYY fallback if second > 12 (second must be day)
+                        const month = first - 1;
+                        const day = second;
+                        let year = third;
+                        if (year < 100) year += 2000;
                         return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // DD/MM/YYYY format: first = Day, second = Month
@@ -1393,20 +1501,40 @@ const saveBulkData = async (req, res) => {
                 }
             }
 
-            // 2. Hyphens (-) -> MM-DD-YYYY (or YYYY-MM-DD if ISO)
+            // 2. Hyphens (-) -> MM-DD-YYYY (e.g. 05-06-2026 -> 6th May 2026)
             if (s.includes('-')) {
                 const datePart = s.split('T')[0].split(' ')[0];
                 const parts = datePart.split('-');
                 if (parts.length >= 3) {
-                    const first = parseInt(parts[0], 10);
-                    const second = parseInt(parts[1], 10);
-                    let third = parseInt(parts[2], 10);
+                    const p0 = parts[0].trim();
+                    const p1 = parts[1].trim();
+                    const p2 = parts[2].trim();
+
+                    const first = parseInt(p0, 10);
+                    const second = parseInt(p1, 10);
+                    let third = parseInt(p2, 10);
+
+                    // Month name check (e.g. 05-May-2026, 22-Apr-2026)
+                    const mKey = p1.toLowerCase().slice(0, 3);
+                    if (monthNames[mKey] !== undefined) {
+                        let year = third;
+                        if (year < 100) year += 2000;
+                        return new Date(Date.UTC(year, monthNames[mKey], first, 12, 0, 0));
+                    }
 
                     if (first > 1000) {
                         // ISO format YYYY-MM-DD
                         const year = first;
                         const month = second - 1;
                         const day = third;
+                        return new Date(Date.UTC(year, month, day, 12, 0, 0));
+                    } else if (first > 12 && second <= 12) {
+                        // Safeguard: If first > 12 (e.g. 22-04-2026), first CANNOT be month!
+                        // Must be DD-MM-YYYY (day = 22, month = 04)
+                        const day = first;
+                        const month = second - 1;
+                        let year = third;
+                        if (year < 100) year += 2000;
                         return new Date(Date.UTC(year, month, day, 12, 0, 0));
                     } else {
                         // Hyphens (-) are strictly MM-DD-YYYY
@@ -1421,7 +1549,7 @@ const saveBulkData = async (req, res) => {
 
             const attempt = new Date(s);
             if (!isNaN(attempt.getTime())) {
-                return new Date(Date.UTC(attempt.getFullYear(), attempt.getMonth(), attempt.getDate(), 12, 0, 0));
+                return new Date(Date.UTC(attempt.getUTCFullYear(), attempt.getUTCMonth(), attempt.getUTCDate(), 12, 0, 0));
             }
             return new Date();
         };
