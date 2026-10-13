@@ -1374,7 +1374,7 @@ const getTransactionReports = async (req, res) => {
 
 const getDueReports = async (req, res) => {
     try {
-        const { college, course, branch, batch, search, campusId, year, quota, studentStatus } = req.query;
+        const { college, course, branch, batch, search, campusId, year, quota, studentStatus, reportType } = req.query;
         const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
 
         // 1. Build SQL Query for Students
@@ -1428,16 +1428,23 @@ const getDueReports = async (req, res) => {
         }
         // Parse Academic Year start year from batch query param (e.g. "2024-2025" -> 2024)
         let ayStartYear = null;
-        if (batch) {
-            if (batch.includes('-')) {
-                const ayStartMatch = batch.match(/^(\d{4})/);
-                if (ayStartMatch) {
-                    ayStartYear = parseInt(ayStartMatch[1], 10);
-                }
-            } else {
-                // Direct batch filter (no hyphen, e.g. "2024")
+        if (reportType === 'batch') {
+            if (batch) {
                 sqlQuery += ` AND batch = ?`;
                 params.push(batch);
+            }
+        } else {
+            if (batch) {
+                if (batch.includes('-')) {
+                    const ayStartMatch = batch.match(/^(\d{4})/);
+                    if (ayStartMatch) {
+                        ayStartYear = parseInt(ayStartMatch[1], 10);
+                    }
+                } else {
+                    // Direct batch filter (no hyphen, e.g. "2024")
+                    sqlQuery += ` AND batch = ?`;
+                    params.push(batch);
+                }
             }
         }
 
@@ -2147,10 +2154,19 @@ const getDueReports = async (req, res) => {
                 hostel: finalizeCategory(hostelSummary),
                 transport: finalizeCategory(transportSummary)
             };
+            const studentYearDues = {};
+            Object.values(groupedData).forEach(item => {
+                const yr = Number(item.studentYear || 1);
+                if (!studentYearDues[yr]) studentYearDues[yr] = 0;
+                studentYearDues[yr] += (item.dueAmount || 0);
+            });
+            student.yearDues = studentYearDues;
+
             student.rawGroupedData = Object.values(groupedData).map(item => ({
                 feeHeadId: item.feeHeadId,
                 feeHeadName: item.feeHeadName,
                 feeHeadCode: item.feeHeadCode,
+                studentYear: item.studentYear,
                 totalAmount: item.totalAmount,
                 paidAmount: item.paidAmount,
                 concessionAmount: item.concessionAmount,

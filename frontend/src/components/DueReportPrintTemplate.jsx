@@ -1,6 +1,17 @@
 import React, { forwardRef } from 'react';
 
-const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], filters = {}, summary = {}, student = {}, includeDetails = false, printedOn: printedOnProp }, ref) => {
+const DueReportPrintTemplate = forwardRef(({
+    type = 'overall',
+    reportData = [],
+    filters = {},
+    summary = {},
+    student = {},
+    includeDetails = false,
+    printedOn: printedOnProp,
+    reportMode = 'academicYear',
+    batchYearsList = []
+}, ref) => {
+    const isBatchMode = reportMode === 'batch' || filters.reportMode === 'batch';
     const fmtAmount = (val) => Number(val || 0).toLocaleString('en-IN');
 
     const formatPrintedOn = () => {
@@ -31,7 +42,7 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
         return `${dt.getDate()} ${dt.toLocaleString('en-US', { month: 'short' })}`;
     };
 
-    // Dynamic term count
+    // Dynamic term count (Academic Year Mode)
     let maxTerms = 1;
     if (type === 'individual') {
         const studentInfo = student || {};
@@ -49,7 +60,28 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
         maxTerms = Math.max(1, ...counts);
     }
 
-    // Most-common due date per term column (same approach as Due Reports grid)
+    // Dynamic batch years (Batch Wise Mode)
+    const resolvedBatchYears = (() => {
+        if (batchYearsList && batchYearsList.length > 0) return batchYearsList;
+        const source = type === 'individual' ? [student].filter(Boolean) : (reportData || []);
+        let maxFound = 1;
+        source.forEach(st => {
+            if (st.yearDues) {
+                Object.keys(st.yearDues).forEach(y => {
+                    if (Number(y) > maxFound) maxFound = Number(y);
+                });
+            }
+            if (st.current_year && Number(st.current_year) > maxFound) {
+                maxFound = Number(st.current_year);
+            }
+        });
+        const maxYear = Math.max(maxFound, 2);
+        const list = [];
+        for (let i = 1; i <= maxYear; i++) list.push(i);
+        return list;
+    })();
+
+    // Most-common due date per term column (Academic Year Mode)
     const termHeaderDates = (() => {
         const source = type === 'individual' ? [student].filter(Boolean) : (reportData || []);
         const dateCounts = {};
@@ -84,7 +116,7 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
         return result;
     })();
 
-    // Columns: #, Pin, Adm, Name, Total Fee, Paid, T1..Tn, Active Due  (no Outstanding)
+    // Colgroup for Academic Year Mode
     const baseColCount = 4;
     const totalColCount = baseColCount + 2 + maxTerms + 1;
 
@@ -100,6 +132,22 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
                 <col key={i} style={{ width: '58px' }} />
             ))}
             <col style={{ width: '60px' }} />
+        </colgroup>
+    );
+
+    // Colgroup for Batch Wise Mode
+    const batchColCount = 5 + resolvedBatchYears.length + 1;
+    const renderBatchColGroup = () => (
+        <colgroup>
+            <col style={{ width: '26px' }} />
+            <col style={{ width: '75px' }} />
+            <col style={{ width: '75px' }} />
+            <col style={{ width: '160px' }} />
+            <col style={{ width: '120px' }} />
+            {resolvedBatchYears.map(yr => (
+                <col key={yr} style={{ width: '68px' }} />
+            ))}
+            <col style={{ width: '75px' }} />
         </colgroup>
     );
 
@@ -119,6 +167,7 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
         backgroundColor: '#fff'
     };
 
+    // Category breakdown for Academic Year
     const renderBreakdownTable = (st, maxTermsVal) => {
         const categories = [
             { key: 'academic', label: 'Academic Fees' },
@@ -218,6 +267,74 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
         );
     };
 
+    // Fee Head breakdown for Batch Wise Mode
+    const renderBatchBreakdownTable = (st, yearsList) => {
+        const breakdowns = (st.feeHeadYearBreakdown || []).filter(fh => 
+            (fh.totalDue || 0) > 0 || yearsList.some(yr => (fh.yearDues?.[yr] || 0) > 0)
+        );
+
+        if (breakdowns.length === 0) {
+            return (
+                <div style={{ padding: '6px', fontStyle: 'italic', color: '#000', fontSize: '9px' }}>
+                    No fee breakdown details found.
+                </div>
+            );
+        }
+
+        return (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginTop: '4px', border: '1px solid #000' }}>
+                <thead>
+                    <tr>
+                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'left', fontWeight: 'bold', color: '#000', backgroundColor: '#fff' }}>Fee Head</th>
+                        {yearsList.map(yr => (
+                            <th key={yr} style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '70px', color: '#000', backgroundColor: '#fff' }}>
+                                Year {yr} Due
+                            </th>
+                        ))}
+                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '75px', color: '#000', backgroundColor: '#ececec' }}>Total Due</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {breakdowns.map((fh, idx) => (
+                        <tr key={fh.headId || idx}>
+                            <td style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', color: '#000', backgroundColor: '#fff' }}>
+                                {fh.headName} {fh.headCode ? `(${fh.headCode})` : ''}
+                            </td>
+                            {yearsList.map(yr => {
+                                const dVal = fh.yearDues?.[yr] || 0;
+                                return (
+                                    <td key={yr} style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>
+                                        ₹{fmtAmount(dVal)}
+                                    </td>
+                                );
+                            })}
+                            <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', color: '#000', backgroundColor: '#ececec' }}>
+                                ₹{fmtAmount(fh.totalDue)}
+                            </td>
+                        </tr>
+                    ))}
+                    <tr style={{ fontWeight: 'bold' }}>
+                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'left', color: '#000', backgroundColor: '#fff' }}>TOTAL DUES</td>
+                        {yearsList.map(yr => {
+                            const yTot = st.yearDues?.[yr] || 0;
+                            return (
+                                <td key={yr} style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>
+                                    ₹{fmtAmount(yTot)}
+                                </td>
+                            );
+                        })}
+                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', fontWeight: 'bold', backgroundColor: '#ececec' }}>
+                            ₹{fmtAmount(st.dueAmount)}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        );
+    };
+
+    // ==========================================
+    // 1. INDIVIDUAL STATEMENT
+    // ==========================================
     if (type === 'individual') {
         const studentInfo = student || {};
         return (
@@ -234,7 +351,9 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
 
                 <div style={{ textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '16px' }}>
                     <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>Pydah Group of Colleges</h1>
-                    <p style={{ margin: '4px 0', fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>INDIVIDUAL DUE STATEMENT</p>
+                    <p style={{ margin: '4px 0', fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
+                        {isBatchMode ? 'BATCH DUE STATEMENT' : 'INDIVIDUAL DUE STATEMENT'}
+                    </p>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', border: '1.5px solid #000', padding: '12px', marginBottom: '16px', borderRadius: '4px', fontSize: '11px' }}>
@@ -243,17 +362,155 @@ const DueReportPrintTemplate = forwardRef(({ type = 'overall', reportData = [], 
                     <div><strong>PIN Number:</strong> <span style={{ fontWeight: 'bold' }}>{studentInfo.pin_no || '-'}</span></div>
                     <div><strong>College:</strong> {studentInfo.college || '-'}</div>
                     <div><strong>Course & Branch:</strong> {studentInfo.course} - {studentInfo.branch}</div>
-                    <div><strong>Academic Year / Sem:</strong> Year {studentInfo.current_year || studentInfo.studentYear || studentInfo.year || '-'}</div>
+                    {isBatchMode ? (
+                        <div><strong>Batch:</strong> <span style={{ fontWeight: 'bold' }}>{studentInfo.batch || filters.batch || '-'}</span></div>
+                    ) : (
+                        <div><strong>Academic Year / Sem:</strong> Year {studentInfo.current_year || studentInfo.studentYear || studentInfo.year || '-'}</div>
+                    )}
                 </div>
 
                 <div style={{ marginTop: '10px' }}>
-                    {renderBreakdownTable(studentInfo, maxTerms)}
+                    {isBatchMode
+                        ? renderBatchBreakdownTable(studentInfo, resolvedBatchYears)
+                        : renderBreakdownTable(studentInfo, maxTerms)}
                 </div>
             </div>
         );
     }
 
-    // Overall Dues Report
+    // ==========================================
+    // 2. OVERALL REPORT - BATCH WISE MODE
+    // ==========================================
+    if (isBatchMode) {
+        const totalStudents = reportData.length;
+        const grandBatchTotals = {};
+        resolvedBatchYears.forEach(yr => { grandBatchTotals[yr] = 0; });
+        (reportData || []).forEach(st => {
+            resolvedBatchYears.forEach(yr => {
+                grandBatchTotals[yr] += Number(st.yearDues?.[yr] || 0);
+            });
+        });
+        const grandBatchDueTotal = (reportData || []).reduce((sum, s) => sum + Number(s.dueAmount || 0), 0);
+
+        // Sort students by PIN / Adm No
+        const sortedStudents = [...(reportData || [])].sort((a, b) => {
+            const pinA = String(a.pin_no || a.admission_number || '').trim();
+            const pinB = String(b.pin_no || b.admission_number || '').trim();
+            return pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
+        });
+
+        const printedOn = formatPrintedOn();
+        const activeDueCellBg = '#ececec';
+
+        return (
+            <div ref={ref} style={{ fontFamily: 'Arial, sans-serif', color: '#000', backgroundColor: '#fff' }}>
+                <style type="text/css">
+                    {`
+                        @page { size: A4 landscape; margin: 6mm; }
+                        @media print {
+                            @page { size: A4 landscape; margin: 6mm; }
+                            body { background-color: #fff; }
+                            .page-break { page-break-before: always; break-before: page; }
+                        }
+                    `}
+                </style>
+
+                <div style={{ padding: '16px 18px' }}>
+                    <div style={{ textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '6px', marginBottom: '8px' }}>
+                        <h1 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>Pydah Group of Colleges</h1>
+                        <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                            BATCH DUE REPORT AS ON DATE : {printedOn} {filters.batch ? `— BATCH : ${filters.batch}` : ''}
+                        </p>
+                    </div>
+
+                    <div style={{ border: '1px solid #000', padding: '5px 8px', marginBottom: '8px', fontSize: '9px', display: 'flex', flexWrap: 'wrap', gap: '3px 14px', backgroundColor: '#fff' }}>
+                        {filters.college && <div><strong>College:</strong> {filters.college}</div>}
+                        {filters.course && <div><strong>Course:</strong> {filters.course}</div>}
+                        {filters.branch && <div><strong>Branch:</strong> {filters.branch}</div>}
+                        {filters.batch && <div><strong>Batch:</strong> {filters.batch}</div>}
+                        {filters.quota && <div><strong>Quota:</strong> {filters.quota}</div>}
+                        {filters.studentStatus && <div><strong>Status:</strong> {filters.studentStatus}</div>}
+                        {filters.scholarshipMode && <div><strong>Scholarship:</strong> {filters.scholarshipMode}</div>}
+                        {filters.feeHeads && <div><strong>Fee Heads:</strong> {filters.feeHeads}</div>}
+                        {filters.search && <div><strong>Search:</strong> {filters.search}</div>}
+                    </div>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: '8.5px' }}>
+                        {renderBatchColGroup()}
+                        <thead>
+                            <tr>
+                                <th style={{ ...thStyle, textAlign: 'center' }}>#</th>
+                                <th style={{ ...thStyle, textAlign: 'center' }}>Pin No</th>
+                                <th style={{ ...thStyle, textAlign: 'center' }}>Admission No</th>
+                                <th style={{ ...thStyle, textAlign: 'left' }}>Student Name</th>
+                                <th style={{ ...thStyle, textAlign: 'left' }}>Course / Branch</th>
+                                {resolvedBatchYears.map(yr => (
+                                    <th key={yr} style={{ ...thStyle, textAlign: 'center' }}>
+                                        Year {yr} Due
+                                    </th>
+                                ))}
+                                <th style={{ ...thStyle, textAlign: 'center', backgroundColor: activeDueCellBg }}>Overall Due</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {sortedStudents.map((st, idx) => (
+                                <React.Fragment key={st.admission_number || idx}>
+                                    <tr>
+                                        <td style={{ ...tdStyle, textAlign: 'center' }}>{idx + 1}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{st.pin_no || '-'}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{st.admission_number || '-'}</td>
+                                        <td style={{ ...tdStyle, fontWeight: 'bold', overflow: 'hidden', wordBreak: 'break-word' }} title={st.student_name}>
+                                            {st.student_name}
+                                        </td>
+                                        <td style={{ ...tdStyle, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {[st.course, st.branch].filter(Boolean).join(' - ') || '-'}
+                                        </td>
+                                        {resolvedBatchYears.map(yr => {
+                                            const yVal = Number(st.yearDues?.[yr] || 0);
+                                            return (
+                                                <td key={yr} style={{ ...tdStyle, textAlign: 'center', fontWeight: yVal > 0 ? 'bold' : 'normal' }}>
+                                                    ₹{fmtAmount(yVal)}
+                                                </td>
+                                            );
+                                        })}
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: activeDueCellBg }}>
+                                            ₹{fmtAmount(st.dueAmount)}
+                                        </td>
+                                    </tr>
+                                    {includeDetails && (
+                                        <tr>
+                                            <td colSpan={batchColCount} style={{ padding: '4px 8px 6px 8px', border: '1px solid #000', backgroundColor: '#fff' }}>
+                                                {renderBatchBreakdownTable(st, resolvedBatchYears)}
+                                            </td>
+                                        </tr>
+                                    )}
+                                </React.Fragment>
+                            ))}
+
+                            {/* Grand total row */}
+                            <tr style={{ fontWeight: 'bold' }}>
+                                <td colSpan={5} style={{ ...tdStyle, textAlign: 'left', fontWeight: 'bold', borderTop: '2px solid #000' }}>
+                                    GRAND TOTAL (All Students: {totalStudents})
+                                </td>
+                                {resolvedBatchYears.map(yr => (
+                                    <td key={yr} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>
+                                        ₹{fmtAmount(grandBatchTotals[yr])}
+                                    </td>
+                                ))}
+                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000', backgroundColor: activeDueCellBg }}>
+                                    ₹{fmtAmount(grandBatchDueTotal)}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    }
+
+    // ==========================================
+    // 3. OVERALL REPORT - ACADEMIC YEAR MODE
+    // ==========================================
     const totalStudents = reportData.length;
     const grandFee = summary.totalFee || reportData.reduce((sum, s) => sum + Number(s.totalFee || 0), 0);
     const grandCollected = summary.totalCollected || reportData.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);

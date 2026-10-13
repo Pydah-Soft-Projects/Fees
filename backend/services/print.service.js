@@ -227,7 +227,7 @@ const renderTemplate = async (templateName, data) => {
     } else if (templateName === 'due-report') {
         try { delete require.cache[require.resolve('../../frontend/src/components/DueReportPrintTemplate')]; } catch (e) {}
         const DynamicDueReportPrintTemplate = require('../../frontend/src/components/DueReportPrintTemplate').default;
-        const { type, reportData, filters, summary, student, includeDetails, printedOn } = data;
+        const { type, reportData, filters, summary, student, includeDetails, printedOn, reportMode, batchYearsList } = data;
         const element = React.createElement(DynamicDueReportPrintTemplate, {
             type,
             reportData,
@@ -235,10 +235,14 @@ const renderTemplate = async (templateName, data) => {
             summary,
             student,
             includeDetails,
-            printedOn
+            printedOn,
+            reportMode: reportMode || filters?.reportMode || 'academicYear',
+            batchYearsList: batchYearsList || []
         });
         renderedMarkup = ReactDOMServer.renderToStaticMarkup(element);
-        pageTitle = type === 'overall' ? 'Overall_Due_Report' : `Due_Report_${student?.admission_number || 'Student'}`;
+        pageTitle = type === 'overall' 
+            ? (reportMode === 'batch' ? `Batch_Due_Report_${filters?.batch || 'All'}` : 'Overall_Due_Report')
+            : `Due_Report_${student?.admission_number || 'Student'}`;
         forceLandscape = true;
 
     } else {

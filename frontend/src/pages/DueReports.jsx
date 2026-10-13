@@ -182,6 +182,7 @@ const DueReports = () => {
     const [expandedRow, setExpandedRow] = useState(null);
     const [activeTab, setActiveTab] = useState('report');
     const [excludeScholarship, setExcludeScholarship] = useState(true);
+    const [reportMode, setReportMode] = useState('academicYear'); // 'academicYear' | 'batch'
 
 
 
@@ -258,10 +259,33 @@ const DueReports = () => {
         setAvailableYears([]);
     };
 
+    const handleReportModeChange = (mode) => {
+        if (mode === reportMode) return;
+        setReportMode(mode);
+        setReportData([]);
+        setHasSearched(false);
+        setExpandedRow(null);
+        if (mode === 'batch') {
+            const currentBatchVal = (filters.batch && !filters.batch.includes('-')) ? filters.batch : (batches[0] || '');
+            setTopFilters(prev => ({ ...prev, batch: currentBatchVal }));
+            setFilters(prev => ({ ...prev, batch: currentBatchVal, year: '' }));
+        } else {
+            const ayVal = currentAcademicYear || (academicYears[0] || '');
+            setTopFilters(prev => ({ ...prev, batch: ayVal }));
+            setFilters(prev => ({ ...prev, batch: ayVal }));
+        }
+    };
+
     const handleTopBatchChange = (e) => {
         const batch = e.target.value;
         setTopFilters({ ...topFilters, batch });
         setFilters({ ...filters, batch });
+    };
+
+    const handleBatchSelectChange = (e) => {
+        const batch = e.target.value;
+        setTopFilters({ ...topFilters, batch });
+        setFilters({ ...filters, batch, year: '' });
     };
 
     const handleCampusChange = (e) => {
@@ -337,9 +361,10 @@ const DueReports = () => {
                 course: filters.course,
                 branch: filters.branch.join(','),
                 batch: filters.batch,
-                year: Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || ''),
+                year: reportMode === 'batch' ? '' : (Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || '')),
                 search: searchTerm,
                 studentStatus: filters.studentStatus,
+                reportType: reportMode,
                 ...(filters.campusId !== 'all' ? { campusId: filters.campusId } : {}),
                 // Only add quota if a subset is selected (not empty and not ALL quotas selected)
                 ...(filters.quota.length > 0 && filters.quota.length < quotas.length ? { quota: filters.quota.join(',') } : {})
@@ -377,6 +402,7 @@ const DueReports = () => {
                 college: s.college,
                 course: s.course,
                 branch: s.branch,
+                batch: s.batch || filters.batch,
                 totalFee: Number(s.totalFee || 0),
                 paidAmount: Number(s.paidAmount || 0),
                 dueAmount: Number(s.dueAmount || 0),
@@ -384,8 +410,13 @@ const DueReports = () => {
                 concessionAmount: Number(s.concessionAmount || 0),
                 termDues: Array.isArray(s.termDues) ? s.termDues.map((v) => Number(v || 0)) : [],
                 termDueDates: Array.isArray(s.termDueDates) ? s.termDueDates : [],
+                yearDues: s.yearDues || {},
+                feeHeadYearBreakdown: s.feeHeadYearBreakdown || [],
                 scholarshipStatus: s.scholarshipStatus,
-                ...(includeDetails ? { groupedFeeDetails: s.groupedFeeDetails || null } : {})
+                ...(includeDetails ? { 
+                    groupedFeeDetails: s.groupedFeeDetails || null,
+                    feeHeadYearBreakdown: s.feeHeadYearBreakdown || []
+                } : {})
             }));
 
             const printedOn = `${new Date().toLocaleString('en-IN', {
@@ -403,6 +434,8 @@ const DueReports = () => {
                 template: 'due-report',
                 data: {
                     type: 'overall',
+                    reportMode,
+                    batchYearsList,
                     reportData: printReportData,
                     includeDetails,
                     printedOn,
@@ -410,14 +443,15 @@ const DueReports = () => {
                         college: filters.college,
                         course: filters.course,
                         branch: filters.branch.join(','),
-                        year: Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || ''),
+                        year: reportMode === 'batch' ? '' : (Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || '')),
                         quota: filters.quota.join(','),
                         batch: filters.batch || topFilters.batch,
                         campusId: filters.campusId !== 'all' ? filters.campusId : topFilters.campusId,
                         studentStatus: filters.studentStatus,
                         feeHeads: feeHeadLabels,
                         scholarshipMode: excludeScholarship ? 'Without Sch' : 'With Sch',
-                        search: searchTerm.trim() || ''
+                        search: searchTerm.trim() || '',
+                        reportMode
                     },
                     summary: {
                         totalStudents: printReportData.length,
@@ -444,12 +478,17 @@ const DueReports = () => {
                 template: 'due-report',
                 data: {
                     type: 'individual',
+                    reportMode,
+                    batchYearsList,
                     student: {
                         ...student,
                         college: student.college || filters.college || '',
                         course: student.course || filters.course || '',
                         branch: student.branch || filters.branch || '',
                         year: student.year || filters.year || '',
+                        batch: student.batch || filters.batch || '',
+                        yearDues: student.yearDues || {},
+                        feeHeadYearBreakdown: student.feeHeadYearBreakdown || []
                     }
                 }
             });
@@ -462,6 +501,31 @@ const DueReports = () => {
 
     const exportToExcel = () => {
         if (!filteredData || filteredData.length === 0) return;
+
+        if (reportMode === 'batch') {
+            const staticHeaders = [
+                "Admission No", "Pin No", "Student Name", "Course", "Branch", "Batch", "Phone",
+                ...batchYearsList.map(y => `Year ${y} Due`),
+                "Overall Due"
+            ];
+            const dataRows = filteredData.map(r => [
+                r.admission_number,
+                r.pin_no,
+                r.student_name,
+                r.course,
+                r.branch,
+                r.batch,
+                r.student_mobile,
+                ...batchYearsList.map(y => r.yearDues?.[y] || 0),
+                r.dueAmount || 0
+            ]);
+            const wsData = [staticHeaders, ...dataRows];
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "BatchDueReport");
+            XLSX.writeFile(wb, `BatchDueReport_${filters.college || 'College'}_${filters.batch || 'Batch'}.xlsx`);
+            return;
+        }
 
         // 1. Identify all Unique Fee Heads dynamically
         const allFeeHeads = new Set();
@@ -549,7 +613,13 @@ const DueReports = () => {
             let valA = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount') ? (a[sortField] || 0) : (a[sortField] || '');
             let valB = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount') ? (b[sortField] || 0) : (b[sortField] || '');
 
-            if (typeof valA === 'string' && sortField !== 'totalFee' && sortField !== 'paidAmount' && sortField !== 'dueAmount' && sortField !== 'activeDue') {
+            if (sortField?.startsWith('year_')) {
+                const yr = Number(sortField.replace('year_', ''));
+                valA = a.yearDues?.[yr] || 0;
+                valB = b.yearDues?.[yr] || 0;
+            }
+
+            if (typeof valA === 'string' && sortField !== 'totalFee' && sortField !== 'paidAmount' && sortField !== 'dueAmount' && sortField !== 'activeDue' && !sortField?.startsWith('year_')) {
                 return sortDir === 'asc'
                     ? String(valA).localeCompare(String(valB))
                     : String(valB).localeCompare(String(valA));
@@ -563,9 +633,6 @@ const DueReports = () => {
     // Recalculate student amounts based on scholarship toggle and/or fee-head filter
     const processedData = React.useMemo(() => {
         const hasFeeHeadFilter = selectedFeeHeadIds.length > 0;
-        if (!excludeScholarship && !hasFeeHeadFilter) {
-            return sortedData;
-        }
 
         const selectedIdSet = new Set(selectedFeeHeadIds.map((id) => String(id)));
         const selectedCodeSet = new Set(
@@ -589,6 +656,54 @@ const DueReports = () => {
             if (code && selectedCodeSet.has(code)) return true;
             return false;
         };
+
+        const buildYearAndHeadBreakdown = (student, isStudentScholarEligible) => {
+            const yearDues = {};
+            const headMap = {};
+
+            (student.rawGroupedData || []).forEach(item => {
+                if (!itemMatchesFeeHeadFilter(item)) return;
+
+                const feeCode = String(item.feeHeadCode || '').toUpperCase();
+                const isServiceFee = feeCode === 'HST01' || feeCode === 'TRN' || feeCode === 'TRN01';
+                const shouldExclude = excludeScholarship && isStudentScholarEligible && item.isScholarshipApplicable && !isServiceFee;
+                if (shouldExclude) return;
+
+                const yr = Number(item.studentYear || 1);
+                const itemDue = Math.max(0, (item.totalAmount || 0) - (item.paidAmount || 0) - (item.concessionAmount || 0));
+
+                yearDues[yr] = (yearDues[yr] || 0) + itemDue;
+
+                const headKey = item.feeHeadId ? String(item.feeHeadId) : (item.feeHeadName || 'unknown');
+                if (!headMap[headKey]) {
+                    headMap[headKey] = {
+                        headId: headKey,
+                        headName: item.feeHeadName || 'Unknown',
+                        headCode: item.feeHeadCode || '',
+                        yearDues: {},
+                        totalDue: 0
+                    };
+                }
+                headMap[headKey].yearDues[yr] = (headMap[headKey].yearDues[yr] || 0) + itemDue;
+                headMap[headKey].totalDue += itemDue;
+            });
+
+            return {
+                yearDues,
+                feeHeadYearBreakdown: Object.values(headMap)
+            };
+        };
+
+        if (!excludeScholarship && !hasFeeHeadFilter) {
+            return sortedData.map(student => {
+                const breakdown = buildYearAndHeadBreakdown(student, false);
+                return {
+                    ...student,
+                    yearDues: breakdown.yearDues,
+                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown
+                };
+            });
+        }
 
         const runClientTermAllocation = (totalAmount, paidAmount, concessionAmount, terms) => {
             const list = Array.isArray(terms) && terms.length > 0
@@ -660,9 +775,15 @@ const DueReports = () => {
 
         return sortedData.map(student => {
             const isStudentScholarEligible = String(student.scholarshipStatus || '').toLowerCase() === 'eligible';
+            const breakdown = buildYearAndHeadBreakdown(student, isStudentScholarEligible);
+
             // Without Sch does not change non-eligible students — keep backend term columns (T1/T3 etc.)
             if (excludeScholarship && !hasFeeHeadFilter && !isStudentScholarEligible) {
-                return student;
+                return {
+                    ...student,
+                    yearDues: breakdown.yearDues,
+                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown
+                };
             }
 
             let totalFee = 0;
@@ -814,6 +935,8 @@ const DueReports = () => {
                 dueAmount,
                 activeDue,
                 termDues,
+                yearDues: breakdown.yearDues,
+                feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown,
                 groupedFeeDetails: rebuiltGroupedFeeDetails,
                 ...(hasFeeHeadFilter ? { feeDetailsArray } : {})
             };
@@ -839,6 +962,48 @@ const DueReports = () => {
         const counts = filteredData.map(st => st.termDues?.length || 0);
         return Math.max(1, ...counts);
     }, [filteredData]);
+
+    const batchYearsList = React.useMemo(() => {
+        if (reportMode !== 'batch') return [];
+        let maxYear = 4;
+        if (filters.course && courseYears[filters.course]) {
+            maxYear = Number(courseYears[filters.course]) || 4;
+        } else if (filteredData && filteredData.length > 0) {
+            let maxFound = 1;
+            filteredData.forEach(st => {
+                if (st.yearDues) {
+                    Object.keys(st.yearDues).forEach(y => {
+                        if (Number(y) > maxFound) maxFound = Number(y);
+                    });
+                }
+                if (st.current_year && Number(st.current_year) > maxFound) {
+                    maxFound = Number(st.current_year);
+                }
+            });
+            maxYear = Math.max(maxFound, 2);
+        }
+        const years = [];
+        for (let i = 1; i <= maxYear; i++) {
+            years.push(i);
+        }
+        return years;
+    }, [reportMode, filters.course, courseYears, filteredData]);
+
+    const batchYearDueTotals = React.useMemo(() => {
+        if (reportMode !== 'batch') return {};
+        const totals = {};
+        batchYearsList.forEach(y => { totals[y] = 0; });
+        filteredData.forEach(student => {
+            batchYearsList.forEach(y => {
+                totals[y] += (student.yearDues?.[y] || 0);
+            });
+        });
+        return totals;
+    }, [reportMode, batchYearsList, filteredData]);
+
+    const totalColSpan = React.useMemo(() => {
+        return reportMode === 'batch' ? (7 + batchYearsList.length) : (10 + maxTerms);
+    }, [reportMode, batchYearsList.length, maxTerms]);
 
     const isAllYearsSelected = React.useMemo(() => {
         const y = filters.year;
@@ -974,6 +1139,24 @@ const DueReports = () => {
                             <p className="text-sm text-gray-500 mt-1">View pending fees and generate reports.</p>
                         </div>
                         <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto items-center">
+                            {/* Report Mode Toggle Switch */}
+                            <div className="flex bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                                <button
+                                    type="button"
+                                    onClick={() => handleReportModeChange('academicYear')}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${reportMode === 'academicYear' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                                >
+                                    Academic Year Wise
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleReportModeChange('batch')}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${reportMode === 'batch' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                                >
+                                    Batch Wise
+                                </button>
+                            </div>
+
                             {/* Top Right Filters */}
                             <select
                                 className="bg-white border border-gray-200 text-gray-900 text-xs rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent block px-3 py-2 shadow-sm font-semibold"
@@ -985,18 +1168,33 @@ const DueReports = () => {
                                     <option key={campus.id} value={campus.id}>{campus.name}</option>
                                 ))}
                             </select>
-                            <select
-                                className="bg-white border border-gray-200 text-gray-900 text-xs rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent block px-3 py-2 shadow-sm font-semibold"
-                                value={topFilters.batch}
-                                onChange={handleTopBatchChange}
-                            >
-                                <option value="">All Academic Years</option>
-                                {academicYears.map(year => (
-                                    <option key={year} value={year}>
-                                        {year} {currentAcademicYear === year ? '(Current)' : ''}
-                                    </option>
-                                ))}
-                            </select>
+                            {reportMode === 'batch' ? (
+                                <select
+                                    className="bg-white border border-gray-200 text-gray-900 text-xs rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent block px-3 py-2 shadow-sm font-semibold"
+                                    value={filters.batch}
+                                    onChange={handleBatchSelectChange}
+                                >
+                                    <option value="">All Batches</option>
+                                    {batches.map(b => (
+                                        <option key={b} value={b}>
+                                            Batch {b}
+                                        </option>
+                                    ))}
+                                </select>
+                            ) : (
+                                <select
+                                    className="bg-white border border-gray-200 text-gray-900 text-xs rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent block px-3 py-2 shadow-sm font-semibold"
+                                    value={topFilters.batch}
+                                    onChange={handleTopBatchChange}
+                                >
+                                    <option value="">All Academic Years</option>
+                                    {academicYears.map(year => (
+                                        <option key={year} value={year}>
+                                            {year} {currentAcademicYear === year ? '(Current)' : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                             <button
                                 onClick={() => setShowPrintModal(true)}
                                 disabled={reportData.length === 0 || loading}
@@ -1102,29 +1300,52 @@ const DueReports = () => {
                              </div>
                          </div>
 
-                        {/* Term-wise Outstanding Balances Stats Bar */}
-                        {maxTerms > 0 && (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                                {termBalances.map((bal, idx) => (
-                                    <div key={idx} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 hover:shadow-md transition">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <p className="text-xs text-gray-600 uppercase font-semibold">Term {idx + 1} Balance</p>
-                                                <p className="text-2xl font-bold text-gray-900 mt-1">₹{bal.toLocaleString('en-IN')}</p>
+                        {/* Term-wise / Year-wise Outstanding Balances Stats Bar */}
+                        {reportMode === 'batch' ? (
+                            batchYearsList.length > 0 && (
+                                <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-${Math.min(batchYearsList.length, 4)} gap-4`}>
+                                    {batchYearsList.map((yr) => {
+                                        const bal = batchYearDueTotals[yr] || 0;
+                                        return (
+                                            <div key={yr} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 hover:shadow-md transition">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs text-gray-600 uppercase font-semibold">Year {yr} Due</p>
+                                                        <p className={`text-2xl font-bold mt-1 ${bal > 0 ? 'text-red-600' : 'text-gray-900'}`}>₹{bal.toLocaleString('en-IN')}</p>
+                                                    </div>
+                                                    <div className="bg-blue-100 p-3 rounded-lg">
+                                                        <DollarSign className="text-blue-600" size={24} />
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="bg-indigo-100 p-3 rounded-lg">
-                                                <DollarSign className="text-indigo-600" size={24} />
+                                        );
+                                    })}
+                                </div>
+                            )
+                        ) : (
+                            maxTerms > 0 && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {termBalances.map((bal, idx) => (
+                                        <div key={idx} className="bg-white border border-gray-200 rounded-lg shadow-sm p-4 hover:shadow-md transition">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-xs text-gray-600 uppercase font-semibold">Term {idx + 1} Balance</p>
+                                                    <p className="text-2xl font-bold text-gray-900 mt-1">₹{bal.toLocaleString('en-IN')}</p>
+                                                </div>
+                                                <div className="bg-indigo-100 p-3 rounded-lg">
+                                                    <DollarSign className="text-indigo-600" size={24} />
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            )
                         )}
 
                         {/* Control Bar: Filters & Search */}
                         <div className="bg-white border border-gray-200 rounded shadow-sm p-4 space-y-3">
                             {/* Row 1: Filters */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                            <div className={`grid grid-cols-2 md:grid-cols-3 ${reportMode === 'batch' ? 'lg:grid-cols-6' : 'lg:grid-cols-7'} gap-3`}>
                                 <div className="w-full text-left">
                                     <label className="text-[11px] font-bold text-gray-600 block mb-1 uppercase tracking-wider">College</label>
                                     <select
@@ -1155,20 +1376,22 @@ const DueReports = () => {
                                     onChange={val => setFilters({ ...filters, branch: val })}
                                     disabled={!filters.course}
                                 />
-                                <div className="min-w-[120px] flex-1">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Year</label>
-                                    <select
-                                        className="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
-                                        value={filters.year}
-                                        onChange={e => setFilters({ ...filters, year: e.target.value })}
-                                        disabled={!filters.course || availableYears.length === 0}
-                                    >
-                                        <option value="">All Years</option>
-                                        {availableYears.map(y => (
-                                            <option key={y} value={y}>{y}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                {reportMode !== 'batch' && (
+                                    <div className="min-w-[120px] flex-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Year</label>
+                                        <select
+                                            className="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                            value={filters.year}
+                                            onChange={e => setFilters({ ...filters, year: e.target.value })}
+                                            disabled={!filters.course || availableYears.length === 0}
+                                        >
+                                            <option value="">All Years</option>
+                                            {availableYears.map(y => (
+                                                <option key={y} value={y}>{y}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <MultiSelectDropdown
                                     label="Quota"
                                     options={quotas || []}
@@ -1264,104 +1487,179 @@ const DueReports = () => {
                             <div className="overflow-x-auto flex-1">
                                 <table className="w-full text-left border-collapse text-xs">
                                     <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 text-gray-600 font-semibold">
-                                        <tr>
-                                            <th className="p-2 w-10 text-center">#</th>
-                                            <th 
-                                                className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('pin_no');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    Pin No {sortField === 'pin_no' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th 
-                                                className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'admission_number' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('admission_number');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    Adm No {sortField === 'admission_number' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th 
-                                                className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[200px]"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'student_name' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('student_name');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center gap-1">
-                                                    Name {sortField === 'student_name' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th 
-                                                className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'totalFee' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('totalFee');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center justify-end gap-1">
-                                                    Total Fee {sortField === 'totalFee' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th 
-                                                className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'paidAmount' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('paidAmount');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center justify-end gap-1">
-                                                    Total Paid {sortField === 'paidAmount' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            {/* Dynamic Term Headers */}
-                                            {Array.from({ length: maxTerms }).map((_, i) => (
-                                                <th key={i} className="p-2 text-right text-gray-500 font-semibold bg-blue-50/15 w-28">
-                                                    <div>T{i + 1} Due</div>
-                                                    {termHeaderDates[i] && (
-                                                        <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
-                                                    )}
+                                        {reportMode === 'batch' ? (
+                                            <tr>
+                                                <th className="p-2 w-10 text-center">#</th>
+                                                <th 
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('pin_no');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Pin No {sortField === 'pin_no' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
                                                 </th>
-                                            ))}
-                                            <th 
-                                                className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'activeDue' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('activeDue');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center justify-end gap-1">
-                                                    Active Due {sortField === 'activeDue' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th 
-                                                className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
-                                                onClick={() => {
-                                                    const dir = (sortField === 'dueAmount' && sortDir === 'asc') ? 'desc' : 'asc';
-                                                    setSortField('dueAmount');
-                                                    setSortDir(dir);
-                                                }}
-                                            >
-                                                <div className="flex items-center justify-end gap-1">
-                                                    Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
-                                                </div>
-                                            </th>
-                                            <th className="p-2 text-center w-24">Status</th>
-                                            <th className="p-2 text-center w-16">Action</th>
-                                        </tr>
+                                                <th 
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'admission_number' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('admission_number');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Adm No {sortField === 'admission_number' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[180px]"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'student_name' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('student_name');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Name {sortField === 'student_name' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th className="p-2 min-w-[140px] text-gray-600 font-semibold">
+                                                    Course / Branch
+                                                </th>
+                                                {batchYearsList.map(yr => (
+                                                    <th 
+                                                        key={yr}
+                                                        className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition bg-blue-50/15 min-w-[105px]"
+                                                        onClick={() => {
+                                                            const sKey = `year_${yr}`;
+                                                            const dir = (sortField === sKey && sortDir === 'asc') ? 'desc' : 'asc';
+                                                            setSortField(sKey);
+                                                            setSortDir(dir);
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            Year {yr} Due {sortField === `year_${yr}` && (sortDir === 'asc' ? '▲' : '▼')}
+                                                        </div>
+                                                    </th>
+                                                ))}
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition min-w-[110px]"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'dueAmount' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('dueAmount');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Overall Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th className="p-2 text-center w-24">Status</th>
+                                                <th className="p-2 text-center w-16">Action</th>
+                                            </tr>
+                                        ) : (
+                                            <tr>
+                                                <th className="p-2 w-10 text-center">#</th>
+                                                <th 
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('pin_no');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Pin No {sortField === 'pin_no' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'admission_number' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('admission_number');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Adm No {sortField === 'admission_number' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[200px]"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'student_name' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('student_name');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        Name {sortField === 'student_name' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'totalFee' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('totalFee');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Total Fee {sortField === 'totalFee' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'paidAmount' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('paidAmount');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Total Paid {sortField === 'paidAmount' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                {/* Dynamic Term Headers */}
+                                                {Array.from({ length: maxTerms }).map((_, i) => (
+                                                    <th key={i} className="p-2 text-right text-gray-500 font-semibold bg-blue-50/15 w-28">
+                                                        <div>T{i + 1} Due</div>
+                                                        {termHeaderDates[i] && (
+                                                            <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
+                                                        )}
+                                                    </th>
+                                                ))}
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'activeDue' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('activeDue');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Active Due {sortField === 'activeDue' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'dueAmount' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('dueAmount');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th className="p-2 text-center w-24">Status</th>
+                                                <th className="p-2 text-center w-16">Action</th>
+                                            </tr>
+                                        )}
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                         {loading ? (
@@ -1382,23 +1680,41 @@ const DueReports = () => {
                                                             <div className="h-3.5 w-40 bg-slate-200 rounded" />
                                                         </div>
                                                     </td>
-                                                    <td className="p-3 text-right">
-                                                        <div className="h-3.5 w-16 bg-slate-200 rounded ml-auto" />
-                                                    </td>
-                                                    <td className="p-3 text-right">
-                                                        <div className="h-3.5 w-16 bg-emerald-100/60 rounded ml-auto" />
-                                                    </td>
-                                                    {Array.from({ length: maxTerms }).map((_, tIdx) => (
-                                                        <td key={tIdx} className="p-3 text-right bg-blue-50/10">
-                                                            <div className="h-3.5 w-14 bg-slate-200 rounded ml-auto" />
-                                                        </td>
-                                                    ))}
-                                                    <td className="p-3 text-right">
-                                                        <div className="h-3.5 w-16 bg-amber-100/60 rounded ml-auto" />
-                                                    </td>
-                                                    <td className="p-3 text-right">
-                                                        <div className="h-3.5 w-16 bg-rose-100/60 rounded ml-auto" />
-                                                    </td>
+                                                    {reportMode === 'batch' ? (
+                                                        <>
+                                                            <td className="p-3">
+                                                                <div className="h-3.5 w-28 bg-slate-200 rounded" />
+                                                            </td>
+                                                            {batchYearsList.map(yr => (
+                                                                <td key={yr} className="p-3 text-right bg-blue-50/10">
+                                                                    <div className="h-3.5 w-14 bg-slate-200 rounded ml-auto" />
+                                                                </td>
+                                                            ))}
+                                                            <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-rose-100/60 rounded ml-auto" />
+                                                            </td>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-slate-200 rounded ml-auto" />
+                                                            </td>
+                                                            <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-emerald-100/60 rounded ml-auto" />
+                                                            </td>
+                                                            {Array.from({ length: maxTerms }).map((_, tIdx) => (
+                                                                <td key={tIdx} className="p-3 text-right bg-blue-50/10">
+                                                                    <div className="h-3.5 w-14 bg-slate-200 rounded ml-auto" />
+                                                                </td>
+                                                            ))}
+                                                            <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-amber-100/60 rounded ml-auto" />
+                                                            </td>
+                                                            <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-rose-100/60 rounded ml-auto" />
+                                                            </td>
+                                                        </>
+                                                    )}
                                                     <td className="p-3 text-center">
                                                         <div className="h-4 w-14 bg-slate-200 rounded-full mx-auto" />
                                                     </td>
@@ -1409,7 +1725,7 @@ const DueReports = () => {
                                             ))
                                         ) : filteredData.length === 0 ? (
                                             <tr>
-                                                <td colSpan={10 + maxTerms} className="text-center py-32">
+                                                <td colSpan={totalColSpan} className="text-center py-32">
                                                     {hasSearched ? (
                                                         <div className="text-gray-500">No records match your search.</div>
                                                     ) : (
@@ -1446,21 +1762,42 @@ const DueReports = () => {
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td className="p-2 text-right text-gray-600">₹{(student.totalFee || 0).toLocaleString('en-IN')}</td>
-                                                            <td className="p-2 text-right text-green-600 font-semibold">₹{(student.paidAmount || 0).toLocaleString('en-IN')}</td>
-                                                            {/* Dynamic Term Dues */}
-                                                            {Array.from({ length: maxTerms }).map((_, i) => {
-                                                                const dueVal = student.termDues?.[i] || 0;
-                                                                return (
-                                                                    <td key={i} className="p-2 text-right text-gray-700 font-medium bg-blue-50/5">
-                                                                        <div className={dueVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                            ₹{dueVal.toLocaleString('en-IN')}
-                                                                        </div>
+                                                            {reportMode === 'batch' ? (
+                                                                <>
+                                                                    <td className="p-2 text-gray-600 text-xs font-medium">
+                                                                        {[student.course, student.branch].filter(Boolean).join(' - ') || '-'}
                                                                     </td>
-                                                                );
-                                                            })}
-                                                            <td className="p-2 text-right text-amber-600 font-bold">₹{(student.activeDue || 0).toLocaleString('en-IN')}</td>
-                                                            <td className="p-2 text-right font-bold text-red-600">₹{due.toLocaleString('en-IN')}</td>
+                                                                    {batchYearsList.map(yr => {
+                                                                        const yrDue = student.yearDues?.[yr] || 0;
+                                                                        return (
+                                                                            <td key={yr} className="p-2 text-right bg-blue-50/5">
+                                                                                <div className={yrDue > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                    ₹{yrDue.toLocaleString('en-IN')}
+                                                                                </div>
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                    <td className="p-2 text-right font-bold text-red-600">₹{due.toLocaleString('en-IN')}</td>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <td className="p-2 text-right text-gray-600">₹{(student.totalFee || 0).toLocaleString('en-IN')}</td>
+                                                                    <td className="p-2 text-right text-green-600 font-semibold">₹{(student.paidAmount || 0).toLocaleString('en-IN')}</td>
+                                                                    {/* Dynamic Term Dues */}
+                                                                    {Array.from({ length: maxTerms }).map((_, i) => {
+                                                                        const dueVal = student.termDues?.[i] || 0;
+                                                                        return (
+                                                                            <td key={i} className="p-2 text-right text-gray-700 font-medium bg-blue-50/5">
+                                                                                <div className={dueVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                    ₹{dueVal.toLocaleString('en-IN')}
+                                                                                </div>
+                                                                            </td>
+                                                                        );
+                                                                    })}
+                                                                    <td className="p-2 text-right text-amber-600 font-bold">₹{(student.activeDue || 0).toLocaleString('en-IN')}</td>
+                                                                    <td className="p-2 text-right font-bold text-red-600">₹{due.toLocaleString('en-IN')}</td>
+                                                                </>
+                                                            )}
                                                             <td className="p-2 text-center">
                                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${status === 'CLEARED' ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-800'}`}>
                                                                     {status}
@@ -1478,84 +1815,158 @@ const DueReports = () => {
                                                         </tr>
                                                         {isExpanded && (
                                                             <tr className="bg-gray-50">
-                                                                <td colSpan={10 + maxTerms} className="p-4 border-b border-gray-200">
+                                                                <td colSpan={totalColSpan} className="p-4 border-b border-gray-200">
                                                                     <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                                                                        <table className="w-full text-xs text-left border-collapse">
-                                                                            <thead>
-                                                                                <tr className="text-gray-500 border-b border-gray-200 text-[10px] uppercase font-bold">
-                                                                                    <th className="pb-2">Fee Category</th>
-                                                                                    <th className="pb-2 text-right">Total</th>
-                                                                                    <th className="pb-2 text-right">Paid</th>
-                                                                                    {Array.from({ length: maxTerms }).map((_, i) => (
-                                                                                        <th key={i} className="pb-2 text-right text-gray-500 bg-blue-50/15 w-28">
-                                                                                            <div>T{i + 1} Due</div>
-                                                                                            {termHeaderDates[i] && (
-                                                                                                <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
-                                                                                            )}
-                                                                                        </th>
-                                                                                    ))}
-                                                                                    <th className="pb-2 text-right">Active Due</th>
-                                                                                    <th className="pb-2 text-right">Concession</th>
-                                                                                    <th className="pb-2 text-right">Due</th>
-                                                                                </tr>
-                                                                            </thead>
-                                                                            <tbody className="divide-y divide-gray-100">
-                                                                                {(() => {
-                                                                                    const categories = [
-                                                                                        { key: 'academic', label: 'Academic Fees' },
-                                                                                        { key: 'hostel', label: 'Hostel Fee' },
-                                                                                        { key: 'transport', label: 'Transport Fee' }
-                                                                                    ].filter(c => student.groupedFeeDetails?.[c.key]);
- 
-                                                                                    if (categories.length === 0) {
-                                                                                        return <tr><td colSpan={7 + maxTerms} className="text-center py-4 text-gray-400 italic">No breakdown details found.</td></tr>;
-                                                                                    }
- 
-                                                                                    return categories.map(cat => {
-                                                                                        const catData = student.groupedFeeDetails[cat.key];
-                                                                                        const catActiveDue = (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
-                                                                                        return (
-                                                                                            <tr key={cat.key} className="hover:bg-gray-50/50">
-                                                                                                <td className="py-2.5 font-bold text-gray-700">{cat.label}</td>
-                                                                                                <td className="py-2.5 text-right text-gray-600">₹{catData.total.toLocaleString('en-IN')}</td>
-                                                                                                <td className="py-2.5 text-right text-green-600 font-semibold">₹{(catData.paid || 0).toLocaleString('en-IN')}</td>
-                                                                                                {Array.from({ length: maxTerms }).map((_, i) => {
-                                                                                                    const termObj = (catData.terms || []).find(t => Number(t.termNumber) === (i + 1));
-                                                                                                    const termBalance = termObj ? (termObj.balance || 0) : 0;
-                                                                                                    const termTarget = termObj ? (termObj.termTarget || 0) : 0;
-                                                                                                    const termConc = termObj ? (termObj.concessionShare || 0) : 0;
-                                                                                                    
-                                                                                                    const tDate = termObj?.dueDate ? new Date(termObj.dueDate) : null;
-                                                                                                    const fTermDate = tDate && !isNaN(tDate.getTime())
-                                                                                                        ? tDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-                                                                                                        : null;
-
-                                                                                                    return (
-                                                                                                        <td key={i} className="py-2.5 text-right text-gray-700 bg-blue-50/5">
-                                                                                                            <div className={termBalance > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                                                                ₹{termBalance.toLocaleString('en-IN')}
-                                                                                                            </div>
-                                                                                                            {termTarget > 0 && (
-                                                                                                                <div className="text-[9px] text-gray-400 font-normal mt-0.5">
-                                                                                                                    Target: ₹{termTarget.toLocaleString('en-IN')}
-                                                                                                                    {termConc > 0 && ` (Conc: ₹${termConc.toLocaleString('en-IN')})`}
-                                                                                                                </div>
-                                                                                                            )}
-                                                                                                            {termBalance > 0 && fTermDate && (
-                                                                                                                <div className="text-[9px] text-gray-400 font-normal font-mono mt-0.5">{fTermDate}</div>
-                                                                                                            )}
+                                                                        {reportMode === 'batch' ? (
+                                                                            <>
+                                                                                <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+                                                                                    <span>Fee Head Wise Year Dues Breakdown</span>
+                                                                                    <span className="text-gray-400 font-normal">Student: {student.student_name} ({student.admission_number})</span>
+                                                                                </div>
+                                                                                <table className="w-full text-xs text-left border-collapse">
+                                                                                    <thead>
+                                                                                        <tr className="text-gray-500 border-b border-gray-200 text-[10px] uppercase font-bold">
+                                                                                            <th className="pb-2">Fee Head</th>
+                                                                                            {batchYearsList.map(yr => (
+                                                                                                <th key={yr} className="pb-2 text-right bg-blue-50/15 w-28">
+                                                                                                    Year {yr} Due
+                                                                                                </th>
+                                                                                            ))}
+                                                                                            <th className="pb-2 text-right w-32">Total Due</th>
+                                                                                        </tr>
+                                                                                    </thead>
+                                                                                    <tbody className="divide-y divide-gray-100">
+                                                                                        {(() => {
+                                                                                            const breakdowns = (student.feeHeadYearBreakdown || []).filter(fh => (fh.totalDue || 0) > 0 || batchYearsList.some(yr => (fh.yearDues?.[yr] || 0) > 0));
+                                                                                            if (breakdowns.length === 0) {
+                                                                                                return (
+                                                                                                    <tr>
+                                                                                                        <td colSpan={2 + batchYearsList.length} className="text-center py-4 text-gray-400 italic">
+                                                                                                            No outstanding fee head dues found.
                                                                                                         </td>
-                                                                                                    );
-                                                                                                })}
-                                                                                                <td className="py-2.5 text-right text-amber-600 font-bold">₹{catActiveDue.toLocaleString('en-IN')}</td>
-                                                                                                <td className="py-2.5 text-right text-purple-600">₹{catData.concession.toLocaleString('en-IN')}</td>
-                                                                                                <td className="py-2.5 text-right font-bold text-red-600">₹{catData.due.toLocaleString('en-IN')}</td>
-                                                                                            </tr>
-                                                                                        );
-                                                                                    });
-                                                                                })()}
-                                                                            </tbody>
-                                                                        </table>
+                                                                                                    </tr>
+                                                                                                );
+                                                                                            }
+                                                                                            return (
+                                                                                                <>
+                                                                                                    {breakdowns.map((fh, fIdx) => (
+                                                                                                        <tr key={fh.headId || fIdx} className="hover:bg-gray-50/50">
+                                                                                                            <td className="py-2.5 font-bold text-gray-700">
+                                                                                                                {fh.headName} {fh.headCode ? <span className="text-gray-400 font-normal">({fh.headCode})</span> : ''}
+                                                                                                            </td>
+                                                                                                            {batchYearsList.map(yr => {
+                                                                                                                const dVal = fh.yearDues?.[yr] || 0;
+                                                                                                                return (
+                                                                                                                    <td key={yr} className="py-2.5 text-right font-medium bg-blue-50/5">
+                                                                                                                        <span className={dVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                                            ₹{dVal.toLocaleString('en-IN')}
+                                                                                                                        </span>
+                                                                                                                    </td>
+                                                                                                                );
+                                                                                                            })}
+                                                                                                            <td className="py-2.5 text-right font-bold text-red-600">
+                                                                                                                ₹{(fh.totalDue || 0).toLocaleString('en-IN')}
+                                                                                                            </td>
+                                                                                                        </tr>
+                                                                                                    ))}
+                                                                                                    <tr className="bg-gray-50/80 font-bold border-t-2 border-gray-200">
+                                                                                                        <td className="py-2 text-gray-800">Total Dues</td>
+                                                                                                        {batchYearsList.map(yr => {
+                                                                                                            const yTotal = student.yearDues?.[yr] || 0;
+                                                                                                            return (
+                                                                                                                <td key={yr} className="py-2 text-right text-red-600 font-bold bg-blue-50/10">
+                                                                                                                    ₹{yTotal.toLocaleString('en-IN')}
+                                                                                                                </td>
+                                                                                                            );
+                                                                                                        })}
+                                                                                                        <td className="py-2 text-right text-red-600 font-bold">
+                                                                                                            ₹{(student.dueAmount || 0).toLocaleString('en-IN')}
+                                                                                                        </td>
+                                                                                                    </tr>
+                                                                                                </>
+                                                                                            );
+                                                                                        })()}
+                                                                                    </tbody>
+                                                                                </table>
+                                                                            </>
+                                                                        ) : (
+                                                                            <table className="w-full text-xs text-left border-collapse">
+                                                                                <thead>
+                                                                                    <tr className="text-gray-500 border-b border-gray-200 text-[10px] uppercase font-bold">
+                                                                                        <th className="pb-2">Fee Category</th>
+                                                                                        <th className="pb-2 text-right">Total</th>
+                                                                                        <th className="pb-2 text-right">Paid</th>
+                                                                                        {Array.from({ length: maxTerms }).map((_, i) => (
+                                                                                            <th key={i} className="pb-2 text-right text-gray-500 bg-blue-50/15 w-28">
+                                                                                                <div>T{i + 1} Due</div>
+                                                                                                {termHeaderDates[i] && (
+                                                                                                    <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
+                                                                                                )}
+                                                                                            </th>
+                                                                                        ))}
+                                                                                        <th className="pb-2 text-right">Active Due</th>
+                                                                                        <th className="pb-2 text-right">Concession</th>
+                                                                                        <th className="pb-2 text-right">Due</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody className="divide-y divide-gray-100">
+                                                                                    {(() => {
+                                                                                        const categories = [
+                                                                                            { key: 'academic', label: 'Academic Fees' },
+                                                                                            { key: 'hostel', label: 'Hostel Fee' },
+                                                                                            { key: 'transport', label: 'Transport Fee' }
+                                                                                        ].filter(c => student.groupedFeeDetails?.[c.key]);
+
+                                                                                        if (categories.length === 0) {
+                                                                                            return <tr><td colSpan={7 + maxTerms} className="text-center py-4 text-gray-400 italic">No breakdown details found.</td></tr>;
+                                                                                        }
+
+                                                                                        return categories.map(cat => {
+                                                                                            const catData = student.groupedFeeDetails[cat.key];
+                                                                                            const catActiveDue = (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
+                                                                                            return (
+                                                                                                <tr key={cat.key} className="hover:bg-gray-50/50">
+                                                                                                    <td className="py-2.5 font-bold text-gray-700">{cat.label}</td>
+                                                                                                    <td className="py-2.5 text-right text-gray-600">₹{catData.total.toLocaleString('en-IN')}</td>
+                                                                                                    <td className="py-2.5 text-right text-green-600 font-semibold">₹{(catData.paid || 0).toLocaleString('en-IN')}</td>
+                                                                                                    {Array.from({ length: maxTerms }).map((_, i) => {
+                                                                                                        const termObj = (catData.terms || []).find(t => Number(t.termNumber) === (i + 1));
+                                                                                                        const termBalance = termObj ? (termObj.balance || 0) : 0;
+                                                                                                        const termTarget = termObj ? (termObj.termTarget || 0) : 0;
+                                                                                                        const termConc = termObj ? (termObj.concessionShare || 0) : 0;
+                                                                                                        
+                                                                                                        const tDate = termObj?.dueDate ? new Date(termObj.dueDate) : null;
+                                                                                                        const fTermDate = tDate && !isNaN(tDate.getTime())
+                                                                                                            ? tDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                                                                            : null;
+
+                                                                                                        return (
+                                                                                                            <td key={i} className="py-2.5 text-right text-gray-700 bg-blue-50/5">
+                                                                                                                <div className={termBalance > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                                    ₹{termBalance.toLocaleString('en-IN')}
+                                                                                                                </div>
+                                                                                                                {termTarget > 0 && (
+                                                                                                                    <div className="text-[9px] text-gray-400 font-normal mt-0.5">
+                                                                                                                        Target: ₹{termTarget.toLocaleString('en-IN')}
+                                                                                                                        {termConc > 0 && ` (Conc: ₹${termConc.toLocaleString('en-IN')})`}
+                                                                                                                    </div>
+                                                                                                                )}
+                                                                                                                {termBalance > 0 && fTermDate && (
+                                                                                                                    <div className="text-[9px] text-gray-400 font-normal font-mono mt-0.5">{fTermDate}</div>
+                                                                                                                )}
+                                                                                                            </td>
+                                                                                                        );
+                                                                                                    })}
+                                                                                                    <td className="py-2.5 text-right text-amber-600 font-bold">₹{catActiveDue.toLocaleString('en-IN')}</td>
+                                                                                                    <td className="py-2.5 text-right text-purple-600">₹{catData.concession.toLocaleString('en-IN')}</td>
+                                                                                                    <td className="py-2.5 text-right font-bold text-red-600">₹{catData.due.toLocaleString('en-IN')}</td>
+                                                                                                </tr>
+                                                                                            );
+                                                                                        });
+                                                                                    })()}
+                                                                                </tbody>
+                                                                            </table>
+                                                                        )}
                                                                     </div>
                                                                 </td>
                                                             </tr>
@@ -1605,7 +2016,9 @@ const DueReports = () => {
                                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                                     <div className="flex items-center gap-2 text-gray-800">
                                         <Printer size={20} className="text-blue-600" />
-                                        <h3 className="text-base font-bold">Print Active Due Report</h3>
+                                        <h3 className="text-base font-bold">
+                                            {reportMode === 'batch' ? 'Print Batch Due Report' : 'Print Active Due Report'}
+                                        </h3>
                                     </div>
                                     <button
                                         onClick={() => !printGenerating && setShowPrintModal(false)}
@@ -1645,13 +2058,13 @@ const DueReports = () => {
                                             <div>
                                                 <span className="text-xs font-bold text-gray-900 block">Include Detailed Fee Breakdown</span>
                                                 <span className="text-[11px] text-gray-500 block mt-0.5">
-                                                    Adds a column displaying fee head breakdowns (e.g. TUT:5000, LAB:2000...) for each student.
+                                                    Adds detailed fee head breakdowns for each student.
                                                 </span>
                                             </div>
                                         </label>
                                     </div>
 
-                                    {!filters.year && (
+                                    {!filters.year && reportMode !== 'batch' && (
                                         <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 font-medium">
                                             Note: Since no specific year filter is selected, records in the print report will be automatically divided by student year.
                                         </div>
