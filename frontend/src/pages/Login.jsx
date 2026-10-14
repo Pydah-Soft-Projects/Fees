@@ -37,6 +37,11 @@ const Login = () => {
     useEffect(() => {
         const queryParams = new URLSearchParams(location.search);
         const ssoToken = queryParams.get('token');
+        const returnUrl = queryParams.get('crmUrl') || queryParams.get('redirect_url') || queryParams.get('returnUrl');
+
+        if (returnUrl) {
+            localStorage.setItem('crmReturnUrl', returnUrl);
+        }
 
         if (ssoToken) {
             handleSSOLogin(ssoToken);

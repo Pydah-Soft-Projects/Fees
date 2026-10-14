@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { getStoredUser } from '../lib/auth';
+import { getStoredUser, clearAuthSession } from '../lib/auth';
 import api from '../lib/api';
 
 const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
@@ -622,28 +622,31 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                     </Link>
                     <button
                         onClick={() => {
+                            const isSSO = localStorage.getItem('isSSO') === 'true';
+                            const crmUrl = localStorage.getItem('crmReturnUrl') || import.meta.env.VITE_CRM_FRONTEND_URL || 'http://localhost:5173';
+
                             Swal.fire({
-                                title: 'Logout?',
-                                text: "You will be returned to the login screen.",
+                                title: 'Are you sure?',
+                                text: isSSO
+                                    ? 'Are you sure you want to log out? You will be redirected to the CRM portal.'
+                                    : 'Are you sure you want to log out? You will be returned to the login screen.',
                                 icon: 'warning',
                                 showCancelButton: true,
                                 confirmButtonColor: '#d33',
                                 cancelButtonColor: '#3085d6',
-                                confirmButtonText: 'Yes, logout!'
+                                confirmButtonText: 'Yes, logout!',
+                                cancelButtonText: 'Cancel'
                             }).then((result) => {
                                 if (result.isConfirmed) {
-                                    const isSSO = localStorage.getItem('isSSO') === 'true';
-                                    localStorage.removeItem('user');
-                                    localStorage.removeItem('token');
-                                    localStorage.removeItem('isSSO');
+                                    clearAuthSession();
 
                                     if (isSSO) {
-                                        window.location.href = import.meta.env.VITE_CRM_FRONTEND_URL || 'http://localhost:5173';
+                                        window.location.href = crmUrl;
                                     } else {
-                                        window.location.href = '/';
+                                        window.location.href = '/login';
                                     }
                                 }
-                            })
+                            });
                         }}
                         className="text-slate-400 hover:text-red-500 transition-colors p-2.5 rounded-xl hover:bg-red-50 shrink-0"
                         title="Logout"

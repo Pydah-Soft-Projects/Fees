@@ -67,6 +67,7 @@ export const clearAuthSession = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('isSSO');
   localStorage.removeItem('sessionId');
+  localStorage.removeItem('crmReturnUrl');
   sessionStorage.clear();
   clearFeeCollectionCache();
 };
