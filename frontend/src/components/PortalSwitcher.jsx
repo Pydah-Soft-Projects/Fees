@@ -73,7 +73,7 @@ export default function PortalSwitcher() {
       if (switcher?.init) {
         switcher.init({
           currentPortal: PORTAL_ID,
-          apiBaseUrl: 'https://crm.pydah.edu.in',
+          apiBaseUrl: 'https://pydah-crm-backend.pydah.edu.in',
           landingUrl: 'https://crm.pydah.edu.in',
           token: token,
           user: user || {},
