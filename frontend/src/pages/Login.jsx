@@ -39,6 +39,14 @@ const Login = () => {
         const ssoToken = queryParams.get('token');
         const returnUrl = queryParams.get('crmUrl') || queryParams.get('redirect_url') || queryParams.get('returnUrl');
 
+        if (ssoToken) {
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            localStorage.removeItem('isSSO');
+            sessionStorage.clear();
+        }
+
         if (returnUrl) {
             localStorage.setItem('crmReturnUrl', returnUrl);
         }

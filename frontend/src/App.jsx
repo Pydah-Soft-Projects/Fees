@@ -1,5 +1,5 @@
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -29,6 +29,7 @@ import VerifyReceipt from './pages/VerifyReceipt';
 import TransactionDateModification from './pages/TransactionDateModification';
 import useSessionGuard from './lib/useSessionGuard';
 import SessionDisplacedModal from './components/SessionDisplacedModal';
+import PortalSwitcher from './components/PortalSwitcher';
 import { isAuthenticated, getStoredUser } from './lib/auth';
 
 const PageLoader = () => (
@@ -101,6 +102,19 @@ function App() {
     setShowDisplaced(false);
   };
 
+  // Target Portal: Clear stale session early when incoming SSO token is detected in URL
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const ssoToken = urlParams.get('token');
+    if (ssoToken) {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('isSSO');
+      sessionStorage.clear();
+    }
+  }, []);
+
   // Establish SSE connection for real-time single-device enforcement
   useSessionGuard();
 
@@ -108,6 +122,8 @@ function App() {
     <Router>
       {/* Security modal — shown when this session was displaced by another device */}
       {showDisplaced && <SessionDisplacedModal onClose={handleCloseDisplaced} />}
+      {/* Pydah Universal Portal Switcher — displayed only for SSO authenticated users */}
+      <PortalSwitcher />
       <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* Public Routes */}

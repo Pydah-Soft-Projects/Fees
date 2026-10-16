@@ -44,6 +44,7 @@ export const persistAuthSession = (user, { isSSO = false } = {}) => {
   } else {
     localStorage.removeItem('isSSO');
   }
+  window.dispatchEvent(new Event('auth-change'));
   return true;
 };
 
@@ -60,6 +61,10 @@ export const isAuthenticated = () => {
   return Boolean(localStorage.getItem('token') && getStoredUser());
 };
 
+export const isSSOUser = () => {
+  return isAuthenticated() && localStorage.getItem('isSSO') === 'true';
+};
+
 import { clearFeeCollectionCache } from './feeCollectionCache';
 
 export const clearAuthSession = () => {
@@ -70,6 +75,7 @@ export const clearAuthSession = () => {
   localStorage.removeItem('crmReturnUrl');
   sessionStorage.clear();
   clearFeeCollectionCache();
+  window.dispatchEvent(new Event('auth-change'));
 };
 
 /**
