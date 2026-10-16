@@ -5,21 +5,27 @@ import { isSSOUser, getStoredUser } from '../lib/auth';
 const SCRIPT_ID = 'pydah-portal-switcher-cdn';
 const PORTAL_ID = 'fee-management';
 const CDN_URL = 'https://crm.pydah.edu.in/portal-switcher.js';
+const API_BASE_URL = 'https://pydah-crm-backend.pydah.edu.in'; // AWS Lightsail Backend
+const LANDING_URL = 'https://crm.pydah.edu.in';
 
 export default function PortalSwitcher() {
   const location = useLocation();
-  const [ssoActive, setSsoActive] = useState(() => isSSOUser());
+  const [ssoActive, setSsoActive] = useState(() => {
+    // Active if marked as SSO user OR if a valid auth token is present
+    return isSSOUser() || Boolean(localStorage.getItem('token') || localStorage.getItem('accessToken'));
+  });
 
   // Keep SSO state in sync with local storage, route changes, and auth events
   useEffect(() => {
     const checkSSO = () => {
-      setSsoActive(isSSOUser());
+      setSsoActive(
+        isSSOUser() || Boolean(localStorage.getItem('token') || localStorage.getItem('accessToken'))
+      );
     };
 
     window.addEventListener('auth-change', checkSSO);
     window.addEventListener('storage', checkSSO);
 
-    // Initial check on route change
     checkSSO();
 
     return () => {
@@ -35,32 +41,25 @@ export default function PortalSwitcher() {
 
     const shouldShow = ssoActive && !isPublicPage;
 
-    const cleanupSwitcher = () => {
+    // Helper to toggle visibility without destroying DOM/script singletons
+    const setSwitcherVisibility = (visible) => {
       const switcher = window.PydahSwitcher || window.PydahPortalSwitcher;
-      if (switcher?.close) {
+      if (!visible && switcher?.close) {
         try {
           switcher.close();
         } catch (_) {}
       }
 
-      // Hide and remove any custom web component elements created by the switcher
       const customElements = document.querySelectorAll(
         'pydah-portal-switcher, portal-switcher, [data-pydah-switcher], #pydah-portal-switcher'
       );
       customElements.forEach((el) => {
-        el.style.display = 'none';
-        el.remove();
+        el.style.display = visible ? '' : 'none';
       });
-
-      // Remove the script tag so it doesn't linger for non-SSO sessions
-      const existingScript = document.getElementById(SCRIPT_ID);
-      if (existingScript) {
-        existingScript.remove();
-      }
     };
 
     if (!shouldShow) {
-      cleanupSwitcher();
+      setSwitcherVisibility(false);
       return;
     }
 
@@ -73,8 +72,8 @@ export default function PortalSwitcher() {
       if (switcher?.init) {
         switcher.init({
           currentPortal: PORTAL_ID,
-          apiBaseUrl: 'https://pydah-crm-backend.pydah.edu.in',
-          landingUrl: 'https://crm.pydah.edu.in',
+          apiBaseUrl: API_BASE_URL,
+          landingUrl: LANDING_URL,
           token: token,
           user: user || {},
           position: 'bottom-right',
@@ -83,16 +82,11 @@ export default function PortalSwitcher() {
         switcher.setSession({
           token: token,
           user: user || {},
+          currentPortal: PORTAL_ID,
         });
       }
 
-      // Ensure any custom elements are visible
-      const customElements = document.querySelectorAll(
-        'pydah-portal-switcher, portal-switcher, [data-pydah-switcher], #pydah-portal-switcher'
-      );
-      customElements.forEach((el) => {
-        el.style.display = '';
-      });
+      setSwitcherVisibility(true);
     };
 
     let script = document.getElementById(SCRIPT_ID);
@@ -102,8 +96,8 @@ export default function PortalSwitcher() {
       script.src = CDN_URL;
       script.async = true;
       script.setAttribute('data-current-portal', PORTAL_ID);
-      script.setAttribute('data-api-base-url', 'https://crm.pydah.edu.in');
-      script.setAttribute('data-landing-url', 'https://crm.pydah.edu.in');
+      script.setAttribute('data-api-base-url', API_BASE_URL); // ✅ Points to backend
+      script.setAttribute('data-landing-url', LANDING_URL);
       script.setAttribute('data-position', 'bottom-right');
 
       script.onload = () => {
