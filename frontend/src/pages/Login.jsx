@@ -139,7 +139,7 @@ const Login = () => {
     };
 
     if (isSSOLoading) {
-        return null;
+        return <pydah-sso-loader />;
     }
 
     return (
