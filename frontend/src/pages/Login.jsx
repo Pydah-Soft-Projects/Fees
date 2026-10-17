@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import api from '../lib/api';
 import { getPostLoginRoute, persistAuthSession, isAuthenticated, getStoredUser } from '../lib/auth';
-import { User, Lock, Loader, Eye, EyeOff, ShieldCheck } from 'lucide-react';
+import { User, Lock, Loader, Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
     const [formData, setFormData] = useState({
@@ -12,7 +12,6 @@ const Login = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isSSOLoading, setIsSSOLoading] = useState(() => Boolean(new URLSearchParams(window.location.search).get('token')));
-    const [ssoStatusText, setSsoStatusText] = useState('Verifying Single Sign-On credentials...');
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
@@ -71,14 +70,12 @@ const Login = () => {
 
     const handleSSOLogin = async (token) => {
         setIsSSOLoading(true);
-        setSsoStatusText('Connecting to Pydah Central SSO Gateway...');
         setError('');
         try {
             const response = await api.post(`/auth/sso-login`, {
                 encryptedToken: token
             });
             if (response.data) {
-                setSsoStatusText('Credentials verified! Establishing Fee Management session...');
                 completeLogin(response.data, { isSSO: true });
             }
         } catch (err) {
@@ -142,81 +139,7 @@ const Login = () => {
     };
 
     if (isSSOLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center p-4 font-sans relative overflow-hidden" style={{ backgroundImage: "url('/background.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
-                {/* Ambient Background Blobs */}
-                <div className="absolute top-[-10%] right-[-5%] w-[600px] h-[600px] bg-blue-200/40 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="absolute bottom-[-10%] left-[-5%] w-[500px] h-[500px] bg-indigo-200/40 rounded-full blur-3xl pointer-events-none"></div>
-
-                <div className="w-full max-w-[480px] bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-[0_25px_70px_-15px_rgba(30,58,138,0.22)] border border-blue-50/80 p-8 sm:p-10 relative z-10 flex flex-col items-center text-center animate-fade-in">
-                    {/* Top SSO Badge */}
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold uppercase tracking-wider mb-6 shadow-sm">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                        <span>Central SSO Gateway</span>
-                    </div>
-
-                    {/* Animated Gateway Handshake Visual */}
-                    <div className="relative w-24 h-24 mb-6 flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full bg-blue-500/15 animate-ping"></div>
-                        <div className="absolute inset-0 rounded-full border-2 border-dashed border-blue-300 animate-[spin_10s_linear_infinite]"></div>
-                        <div className="absolute -inset-1 rounded-full border-2 border-t-blue-600 border-r-indigo-500 border-b-transparent border-l-transparent animate-spin"></div>
-                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-blue-700 shadow-xl shadow-blue-500/30 flex items-center justify-center text-white relative z-10">
-                            <ShieldCheck size={32} className="animate-pulse" />
-                        </div>
-                    </div>
-
-                    {/* Logo Emblem */}
-                    <div className="flex flex-col items-center select-none mb-3">
-                        <div className="border-[2.5px] border-blue-600 px-6 py-2 rounded-tl-[18px] rounded-br-[18px] rounded-tr-[4px] rounded-bl-[4px] bg-blue-50/40 leading-none">
-                            <span className="text-2xl font-black text-blue-600 tracking-widest font-sans">
-                                PYDAH
-                            </span>
-                        </div>
-                        <span className="text-[11px] text-slate-400 mt-2 font-serif italic tracking-widest uppercase">
-                            Education & Beyond
-                        </span>
-                    </div>
-
-                    <h2 className="text-2xl font-bold text-slate-800 tracking-tight mt-2 mb-2">
-                        Single Sign-On
-                    </h2>
-                    <p className="text-slate-500 text-sm font-medium mb-6 max-w-xs leading-relaxed">
-                        Authenticating your central campus credentials for Fee Management.
-                    </p>
-
-                    {/* Dynamic Status Box */}
-                    <div className="w-full bg-slate-50/90 rounded-2xl p-4 border border-slate-100 mb-6 text-left space-y-3">
-                        <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                            <span className="flex items-center gap-2.5">
-                                <Loader className="animate-spin text-blue-600 shrink-0" size={16} />
-                                <span className="line-clamp-1">{ssoStatusText}</span>
-                            </span>
-                        </div>
-                        {/* Shimmer progress bar */}
-                        <div className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden relative">
-                            <div className="absolute inset-y-0 left-0 right-0 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-600 animate-pulse rounded-full"></div>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
-                            <span className="flex items-center gap-1">
-                                <Lock size={12} className="text-slate-400" /> AES-256 Token Verification
-                            </span>
-                            <span className="text-blue-600 font-semibold">Active</span>
-                        </div>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setIsSSOLoading(false);
-                            navigate('/login', { replace: true });
-                        }}
-                        className="text-xs font-semibold text-slate-400 hover:text-blue-600 hover:underline transition-colors"
-                    >
-                        Trouble logging in? Use standard password login
-                    </button>
-                </div>
-            </div>
-        );
+        return null;
     }
 
     return (
@@ -354,7 +277,6 @@ const Login = () => {
                                         setShowForgotModal(true);
                                         setModalError('');
                                         setModalSuccess('');
-                                        setOtpSent(false);
                                     }}
                                     className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline focus:outline-none"
                                 >
