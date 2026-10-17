@@ -53,6 +53,17 @@ const Login = () => {
         }
 
         if (ssoToken) {
+            // Ensure portal-switcher.js is loaded so <pydah-sso-loader /> custom element is registered
+            if (!document.getElementById('pydah-portal-switcher-cdn')) {
+                const script = document.createElement('script');
+                script.id = 'pydah-portal-switcher-cdn';
+                script.src = 'https://crm.pydah.edu.in/portal-switcher.js';
+                script.async = true;
+                script.setAttribute('data-current-portal', 'fee-management');
+                script.setAttribute('data-api-base-url', 'https://pydah-crm-backend.pydah.edu.in');
+                script.setAttribute('data-landing-url', 'https://crm.pydah.edu.in');
+                document.head.appendChild(script);
+            }
             handleSSOLogin(ssoToken);
         }
     }, [location.search]);
