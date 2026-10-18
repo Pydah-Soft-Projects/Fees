@@ -431,8 +431,14 @@ const BulkFeeUpload = () => {
                                                                                         ₹{Number(p.amount || 0).toLocaleString('en-IN')}
                                                                                     </td>
                                                                                     <td className="px-4 py-2 text-xs">
-                                                                                        <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${p.mode === 'Bank' ? 'bg-purple-100 text-purple-700 border border-purple-200' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'}`}>
-                                                                                            {p.mode || 'Cash'}
+                                                                                        <span className={`px-2 py-0.5 rounded font-bold text-[11px] ${
+                                                                                            p.mode === 'Bank'
+                                                                                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                                                                                                : p.mode === 'Cash'
+                                                                                                ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                                                                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                                                                                        }`}>
+                                                                                            {p.mode || 'None'}
                                                                                         </span>
                                                                                     </td>
                                                                                     <td className="px-4 py-2 text-xs font-mono text-gray-600">{p.receipt || p.ref || '-'}</td>

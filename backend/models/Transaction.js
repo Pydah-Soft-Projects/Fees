@@ -51,7 +51,7 @@ const transactionSchema = mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['Cash', 'Bank', 'UPI', 'Cheque', 'DD', 'Card', 'Net Banking', 'Adjustment', 'Waiver', 'Refund', 'Credit', 'RTF', 'Transfer'],
+    enum: ['None', 'Cash', 'Bank', 'UPI', 'Cheque', 'DD', 'Card', 'Net Banking', 'Adjustment', 'Waiver', 'Refund', 'Credit', 'RTF', 'Transfer'],
     default: 'Cash',
   },
   bankName: {

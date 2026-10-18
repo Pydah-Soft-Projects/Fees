@@ -864,7 +864,7 @@ const processBulkUpload = async (req, res) => {
                     } catch (e) {}
                 }
                 const transDate = rawDateVal ? parseDate(rawDateVal) : new Date();
-                const payMode = 'Cash'; // User explicitly specified: Always set payment mode to 'Cash'
+                const payMode = 'None';
 
                 const canonId = currentStudent.canonId;
                 if (!previewDataMap.has(canonId)) {
@@ -1086,8 +1086,17 @@ const processBulkUpload = async (req, res) => {
                         const headObj = allFeeHeads.find(h => h.name === headName);
                         const targetHeadId = headObj ? headObj._id.toString() : 'UNKNOWN';
 
-                        const rawMode = colMap.MODE !== undefined ? String(row[colMap.MODE] || '').trim().toLowerCase() : '';
-                        const payMode = rawMode.includes('bank') ? 'Bank' : 'Cash';
+                        const rawMode = colMap.MODE !== undefined ? String(row[colMap.MODE] || '').trim() : '';
+                        let payMode = 'None';
+                        if (rawMode) {
+                            if (/bank/i.test(rawMode)) payMode = 'Bank';
+                            else if (/cash/i.test(rawMode)) payMode = 'Cash';
+                            else if (/upi/i.test(rawMode)) payMode = 'UPI';
+                            else if (/cheque|chq/i.test(rawMode)) payMode = 'Cheque';
+                            else if (/dd/i.test(rawMode)) payMode = 'DD';
+                            else if (/card/i.test(rawMode)) payMode = 'Card';
+                            else payMode = rawMode;
+                        }
                         let rawDateVal = colMap.DATE !== undefined ? row[colMap.DATE] : null;
                         if (sheet && colMap.DATE !== undefined) {
                             try {
@@ -1130,14 +1139,23 @@ const processBulkUpload = async (req, res) => {
                         const headObj = matchedHead || activeSectionHead || (allFeeHeads.find(h => h.name.toLowerCase().includes('tuition')) || allFeeHeads[0]);
 
                         // Mode & Ref No Rule:
-                        // If RefNo column has a value -> Bank mode, ref = RefNo. Else -> Cash mode, ref = ''.
+                        // If Mode column present, use it. Else if RefNo column has a value -> Bank mode, ref = RefNo. Else -> None mode.
                         let refVal = colMap.REF !== undefined && row[colMap.REF] !== undefined && row[colMap.REF] !== null ? String(row[colMap.REF]).trim() : '';
-                        let payMode = 'Cash';
-                        if (refVal && refVal !== '' && refVal.toLowerCase() !== 'undefined' && refVal.toLowerCase() !== 'null') {
+                        const rawSingleMode = colMap.MODE !== undefined ? String(row[colMap.MODE] || '').trim() : '';
+                        let payMode = 'None';
+                        if (rawSingleMode) {
+                            if (/bank/i.test(rawSingleMode)) payMode = 'Bank';
+                            else if (/cash/i.test(rawSingleMode)) payMode = 'Cash';
+                            else if (/upi/i.test(rawSingleMode)) payMode = 'UPI';
+                            else if (/cheque|chq/i.test(rawSingleMode)) payMode = 'Cheque';
+                            else if (/dd/i.test(rawSingleMode)) payMode = 'DD';
+                            else if (/card/i.test(rawSingleMode)) payMode = 'Card';
+                            else payMode = rawSingleMode;
+                        } else if (refVal && refVal !== '' && refVal.toLowerCase() !== 'undefined' && refVal.toLowerCase() !== 'null') {
                             payMode = 'Bank';
                         } else {
                             refVal = '';
-                            payMode = 'Cash';
+                            payMode = 'None';
                         }
 
                         let rawDateVal = colMap.DATE !== undefined ? row[colMap.DATE] : null;
@@ -1701,7 +1719,7 @@ const saveBulkData = async (req, res) => {
                             feeHead: p.headId,
                             amount: p.amount,
                             transactionType: 'DEBIT',
-                            paymentMode: p.mode || 'Cash',
+                            paymentMode: p.mode || 'None',
                             paymentDate: parseDate(p.date),
                             referenceNo: p.ref || '',
                             receiptNumber: p.receipt || '',
