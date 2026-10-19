@@ -5,7 +5,7 @@ import { isSSOUser, getStoredUser } from '../lib/auth';
 const SCRIPT_ID = 'pydah-portal-switcher-cdn';
 const PORTAL_ID = 'fee-management';
 const CDN_URL = 'https://crm.pydah.edu.in/portal-switcher.js';
-const API_BASE_URL = 'https://pydah-crm-backend.pydah.edu.in'; // AWS Lightsail Backend
+const API_BASE_URL = 'https://crm.pydah.edu.in'; // AWS Lightsail Backend
 const LANDING_URL = 'https://crm.pydah.edu.in';
 
 export default function PortalSwitcher() {

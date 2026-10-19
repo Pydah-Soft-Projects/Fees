@@ -60,7 +60,7 @@ const Login = () => {
                 script.src = 'https://crm.pydah.edu.in/portal-switcher.js';
                 script.async = true;
                 script.setAttribute('data-current-portal', 'fee-management');
-                script.setAttribute('data-api-base-url', 'https://pydah-crm-backend.pydah.edu.in');
+                script.setAttribute('data-api-base-url', 'https://crm.pydah.edu.in');
                 script.setAttribute('data-landing-url', 'https://crm.pydah.edu.in');
                 document.head.appendChild(script);
             }

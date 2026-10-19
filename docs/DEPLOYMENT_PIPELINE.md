@@ -117,7 +117,7 @@ concurrency:
   env:
     VITE_API_URL: /api
     VITE_CRM_FRONTEND_URL: https://crm.pydah.edu.in
-    VITE_CRM_BACKEND_URL: https://pydah-crm-backend.pydah.edu.in
+    VITE_CRM_BACKEND_URL: https://crm.pydah.edu.in
   run: npm run build
 ```
 - Runs clean install (`npm ci`) for all frontend packages.
