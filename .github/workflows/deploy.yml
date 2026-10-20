@@ -84,7 +84,7 @@ jobs:
 
           set -e
 
-          PROJECT_DIR="/home/ec2-user/PydahFeeManagement"
+          PROJECT_DIR="/home/ec2-user/Fees"
           FRONTEND_WEB_ROOT="/var/www/pydahfee"
 
           echo "=========================================="
