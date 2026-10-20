@@ -122,6 +122,9 @@ jobs:
             echo "==> Backend dependencies unchanged, skipping npm ci"
           fi
 
+          # Link backend/node_modules to root so frontend JSX templates required by print service can resolve react
+          ln -sfn "${PROJECT_DIR}/backend/node_modules" "${PROJECT_DIR}/node_modules"
+
           #################################################
           # FRONTEND PART (UPDATED)
           #################################################

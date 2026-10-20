@@ -1,3 +1,12 @@
+const path = require('path');
+const Module = require('module');
+
+// Allow frontend JSX templates (required by print.service.js) to resolve React from backend/node_modules
+const backendNodeModules = path.resolve(__dirname, 'node_modules');
+if (!Module.globalPaths.includes(backendNodeModules)) {
+  Module.globalPaths.push(backendNodeModules);
+}
+
 const express = require('express');
 const dotenv = require('dotenv');
 

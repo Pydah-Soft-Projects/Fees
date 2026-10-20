@@ -1,3 +1,5 @@
+const path = require('path');
+
 module.exports = {
   apps: [
     {
@@ -10,6 +12,7 @@ module.exports = {
       max_memory_restart: '1G',
       env: {
         NODE_ENV: 'production',
+        NODE_PATH: path.resolve(__dirname, 'node_modules'),
       },
       error_file: './logs/pm2-error.log',
       out_file: './logs/pm2-out.log',
