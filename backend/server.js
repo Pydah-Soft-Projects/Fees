@@ -72,6 +72,13 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 
+// Security Hardening: Disable Express fingerprinting
+app.disable('x-powered-by');
+
+// Security Headers Middleware (CSP, X-Frame-Options, X-Content-Type-Options, etc.)
+const securityHeaders = require('./middleware/securityHeaders');
+app.use(securityHeaders);
+
 // Middleware
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));

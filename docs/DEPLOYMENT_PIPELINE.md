@@ -250,10 +250,31 @@ On the AWS Lightsail server, the application is wired as follows:
 | **Backend API** | Node.js / Express on `http://127.0.0.1:5000` | Managed by PM2 as `backend` |
 | **Reverse Proxy** | Nginx | Routes `/` -> `/var/www/pydahfee` & `/api` -> `localhost:5000` |
 
-### Sample Nginx Block
+### Hardened Production Nginx Configuration
 ```nginx
 server {
     server_name fee.pydah.edu.in;
+
+    # 1. Fix: Server information header exposed
+    # Suppresses Nginx version number from 'Server' response header
+    server_tokens off;
+
+    # 2. Fix: X-Frame-Options (Clickjacking protection)
+    add_header X-Frame-Options "SAMEORIGIN" always;
+
+    # 3. Fix: X-Content-Type-Options (MIME confusion attack protection)
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # 4. Fix: Content Security Policy (CSP - XSS & Clickjacking protection)
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://crm.pydah.edu.in https://checkout.razorpay.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://static.wixstatic.com https://api.qrserver.com https://*.amazonaws.com https://*.s3.amazonaws.com https://crm.pydah.edu.in; connect-src 'self' https://crm.pydah.edu.in https://api.razorpay.com https://*.amazonaws.com https://*.s3.amazonaws.com ws: wss:; frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com blob: data:; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; frame-ancestors 'self';" always;
+
+    # 5. Fix: HTTP Strict Transport Security (HSTS - Prevents SSL-stripping & MITM attacks)
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Additional Defense-in-Depth Headers
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
 
     # Frontend Static Files
     root /var/www/pydahfee;
@@ -273,6 +294,9 @@ server {
         proxy_cache_bypass $http_upgrade;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+
+        # Ensure backend version / technology fingerprinting is stripped
+        proxy_hide_header X-Powered-By;
     }
 }
 ```
