@@ -59,7 +59,7 @@ const MultiSelectDropdown = ({ label, options, selectedValues, onChange, disable
                     {selectedValues.length === 0 
                         ? `Select ${label}` 
                         : selectedValues.length === optionValues.length && optionValues.length > 0
-                        ? `All ${label}s` 
+                        ? (label.toLowerCase().endsWith('status') ? `All ${label}es` : `All ${label}s`) 
                         : `${selectedValues.length} Selected`}
                 </span>
                 <span className="ml-2 text-gray-500 text-[10px]">▼</span>
@@ -156,7 +156,7 @@ const DueReports = () => {
         batch: '',
         quota: [],
         year: '',
-        studentStatus: 'Regular'
+        studentStatus: ['Regular']
     });
     const [sortField, setSortField] = useState('');
     const [sortDir, setSortDir] = useState('asc');
@@ -247,7 +247,7 @@ const DueReports = () => {
     const handleTopCampusChange = (e) => {
         const campusId = e.target.value;
         setTopFilters({ campusId, batch: '' });
-        setFilters({ campusId, college: '', course: '', branch: [], batch: topFilters.batch, quota: [], year: '', studentStatus: 'Regular' });
+        setFilters({ campusId, college: '', course: '', branch: [], batch: topFilters.batch, quota: [], year: '', studentStatus: ['Regular'] });
         if (campusId === 'all') {
             setColleges(Object.keys(metadata));
         } else {
@@ -290,7 +290,7 @@ const DueReports = () => {
 
     const handleCampusChange = (e) => {
         const campusId = e.target.value;
-        setFilters({ campusId, college: '', course: '', branch: [], batch: topFilters.batch, quota: [], year: '', studentStatus: 'Regular' });
+        setFilters({ campusId, college: '', course: '', branch: [], batch: topFilters.batch, quota: [], year: '', studentStatus: ['Regular'] });
         if (campusId === 'all') {
             setColleges(Object.keys(metadata));
         } else {
@@ -356,6 +356,12 @@ const DueReports = () => {
         setHasSearched(true);
         setCurrentPage(1); // Reset page on new fetch
         try {
+            const resolvedStatus = Array.isArray(filters.studentStatus)
+                ? (filters.studentStatus.length === 0 || (studentStatuses.length > 0 && filters.studentStatus.length === studentStatuses.length)
+                    ? 'all'
+                    : filters.studentStatus.join(','))
+                : (filters.studentStatus || 'Regular');
+
             const params = {
                 college: filters.college,
                 course: filters.course,
@@ -363,7 +369,7 @@ const DueReports = () => {
                 batch: filters.batch,
                 year: reportMode === 'batch' ? '' : (Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || '')),
                 search: searchTerm,
-                studentStatus: filters.studentStatus,
+                studentStatus: resolvedStatus,
                 reportType: reportMode,
                 ...(filters.campusId !== 'all' ? { campusId: filters.campusId } : {}),
                 // Only add quota if a subset is selected (not empty and not ALL quotas selected)
@@ -447,7 +453,7 @@ const DueReports = () => {
                         quota: filters.quota.join(','),
                         batch: filters.batch || topFilters.batch,
                         campusId: filters.campusId !== 'all' ? filters.campusId : topFilters.campusId,
-                        studentStatus: filters.studentStatus,
+                        studentStatus: Array.isArray(filters.studentStatus) ? filters.studentStatus.join(', ') : filters.studentStatus,
                         feeHeads: feeHeadLabels,
                         scholarshipMode: excludeScholarship ? 'Without Sch' : 'With Sch',
                         search: searchTerm.trim() || '',
@@ -1065,7 +1071,7 @@ const DueReports = () => {
             { label: 'Branch', value: filters.branch?.length ? filters.branch.join(', ') : 'All' },
             { label: 'Year', value: (Array.isArray(filters.year) ? filters.year.join(', ') : filters.year) || 'All Years' },
             { label: 'Quota', value: filters.quota?.length ? filters.quota.join(', ') : 'All' },
-            { label: 'Student Status', value: filters.studentStatus || 'All' },
+            { label: 'Student Status', value: Array.isArray(filters.studentStatus) ? (filters.studentStatus.length === studentStatuses.length && studentStatuses.length > 0 ? 'All Statuses' : filters.studentStatus.join(', ') || 'All') : (filters.studentStatus || 'All') },
             { label: 'Fee Heads', value: feeHeadLabels },
             { label: 'Scholarship Mode', value: excludeScholarship ? 'Without Sch' : 'With Sch' },
             { label: 'Search', value: searchTerm.trim() || '—' },
@@ -1406,17 +1412,13 @@ const DueReports = () => {
                                     onChange={setSelectedFeeHeadIds}
                                     disabled={feeHeadFilterOptions.length === 0}
                                 />
-                                <div className="w-full text-left">
-                                    <label className="text-[11px] font-bold text-gray-600 block mb-1 uppercase tracking-wider">Student Status</label>
-                                    <select
-                                        className="bg-gray-50 border border-gray-300 text-gray-900 text-xs rounded focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 font-semibold"
-                                        value={filters.studentStatus}
-                                        onChange={e => setFilters({ ...filters, studentStatus: e.target.value })}
-                                    >
-                                        <option value="all">All Statuses</option>
-                                        {studentStatuses.map(s => <option key={s} value={s}>{s}</option>)}
-                                    </select>
-                                </div>
+                                <MultiSelectDropdown
+                                    label="Student Status"
+                                    options={studentStatuses}
+                                    selectedValues={filters.studentStatus}
+                                    onChange={val => setFilters({ ...filters, studentStatus: val })}
+                                    disabled={studentStatuses.length === 0}
+                                />
                             </div>
 
                             {/* Row 2: Actions */}

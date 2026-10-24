@@ -76,6 +76,8 @@ const getOverallConcessions = async (req, res) => {
             params.push(searchPattern, searchPattern, searchPattern);
         }
 
+        sqlQuery += ` ORDER BY CASE WHEN pin_no IS NULL OR pin_no = '' OR pin_no = '-' THEN 1 ELSE 0 END, pin_no ASC, admission_number ASC`;
+
         const [students] = await db.query(sqlQuery, params);
 
         if (students.length === 0) {

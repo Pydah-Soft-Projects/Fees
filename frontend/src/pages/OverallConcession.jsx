@@ -192,7 +192,7 @@ const OverallConcession = () => {
     const [isSaving,         setIsSaving]         = useState(false);
 
     // ── sorting states ────────────────────────────────────────────────────
-    const [viewSortField, setViewSortField] = useState(''); // 'student_name' | 'admission_number' | 'pin_no'
+    const [viewSortField, setViewSortField] = useState('pin_no'); // 'student_name' | 'admission_number' | 'pin_no'
     const [viewSortDir, setViewSortDir] = useState('asc'); // 'asc' | 'desc'
     const [bulkSortField, setBulkSortField] = useState(''); // 'student_name' | 'admission_number' | 'pin_no'
     const [bulkSortDir, setBulkSortDir] = useState('asc'); // 'asc' | 'desc'
@@ -2044,6 +2044,15 @@ const OverallConcession = () => {
                             if (!viewSortField) return 0;
                             let valA = a[viewSortField] || '';
                             let valB = b[viewSortField] || '';
+
+                            // Pin numbers: ensure empty/dash pins sort to the end in ascending order
+                            if (viewSortField === 'pin_no') {
+                                const isInvalidA = !valA || valA === '-';
+                                const isInvalidB = !valB || valB === '-';
+                                if (isInvalidA && !isInvalidB) return viewSortDir === 'asc' ? 1 : -1;
+                                if (!isInvalidA && isInvalidB) return viewSortDir === 'asc' ? -1 : 1;
+                            }
+
                             if (typeof valA === 'string') {
                                 return viewSortDir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                             }
