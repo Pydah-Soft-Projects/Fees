@@ -20,7 +20,7 @@ const buildContentSecurityPolicy = () => {
     // Allows images from self, data URIs, blob URIs, AWS S3, Pydah CRM, Wix static, and QR code API
     "img-src 'self' data: blob: https://static.wixstatic.com https://api.qrserver.com https://*.amazonaws.com https://*.s3.amazonaws.com https://crm.pydah.edu.in",
     // Allows API / WebSocket / EventSource connections to self, CRM, Razorpay, S3, and local/prod WebSockets
-    "connect-src 'self' https://crm.pydah.edu.in https://api.razorpay.com https://*.amazonaws.com https://*.s3.amazonaws.com ws: wss:",
+    "connect-src 'self' http://localhost:* http://127.0.0.1:* https://crm.pydah.edu.in https://api.razorpay.com https://*.amazonaws.com https://*.s3.amazonaws.com ws: wss:",
     // Allows Razorpay modals and internal hidden print iframe
     "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com blob: data:",
     // Allows PDF.js web workers
