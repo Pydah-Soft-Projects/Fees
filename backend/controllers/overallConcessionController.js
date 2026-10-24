@@ -397,7 +397,7 @@ const deleteOverallConcession = async (req, res) => {
 // ── Shared helper: save concessions for ONE student inside a given connection/transaction ──
 const _saveStudentConcessions = async ({
     admissionNumber, pinNo, studentName, college, course, branch, batch,
-    category, concessions, feeHeads, codeMap, user
+    category, concessions, feeHeads, codeMap, user, merge = false
 }) => {
     // Fetch student's actual parameters from SQL database to resolve any misconfigurations
     let resolvedCollege = college;
@@ -449,8 +449,57 @@ const _saveStudentConcessions = async ({
 
     const updatedConcessions = await Promise.all(concessions.map(normalizeIncomingEntry));
 
+    let approvedRequest = await OverallConcessionRequest.findOne({
+        admissionNumber,
+        status: 'APPROVED'
+    }).sort({ updatedAt: -1, createdAt: -1 });
+
+    let previousFees = approvedRequest ? approvedRequest.concessions || [] : [];
+
+    let finalConcessions = updatedConcessions;
+    let removedRevised = [];
+
+    if (merge && previousFees.length > 0) {
+        // Merge: incoming entries override matching keys (feeHeadId + studentYear + semester),
+        // while preserving existing concessions for other fee heads / years / semesters.
+        const mergedMap = {};
+        previousFees.forEach(e => {
+            const resolvedId = resolveFeeHeadId(e, codeMap) || String(e.feeHeadId || '');
+            const resolvedFh = feeHeads.find(fh => fh._id.toString() === resolvedId);
+            const normalizedExisting = formatConcessionEntry({
+                feeHeadId:      resolvedId,
+                feeHeadCode:    resolvedFh ? resolvedFh.code : (e.feeHeadCode || ''),
+                studentYear:    Number(e.studentYear),
+                semester:       normalizeSemester(e.semester),
+                amount:         e.amount,
+                concessionType: e.concessionType,
+                remarks:        e.remarks
+            });
+            const key = `${normalizedExisting.feeHeadId}_${Number(normalizedExisting.studentYear)}_${normalizeSemester(normalizedExisting.semester) ?? 'null'}`;
+            mergedMap[key] = normalizedExisting;
+        });
+        updatedConcessions.forEach(c => {
+            const key = `${c.feeHeadId}_${Number(c.studentYear)}_${normalizeSemester(c.semester) ?? 'null'}`;
+            mergedMap[key] = c;
+        });
+        finalConcessions = Object.values(mergedMap);
+        // Under merge mode, non-targeted fee heads are preserved and never cancelled
+        removedRevised = [];
+    } else {
+        const nextKeys = new Set(
+            updatedConcessions
+                .filter(e => normalizeConcessionType(e.concessionType) === 'REVISED')
+                .map(e => `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`)
+        );
+        removedRevised = previousFees.filter(e => {
+            if (normalizeConcessionType(e.concessionType) !== 'REVISED') return false;
+            const key = `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`;
+            return !nextKeys.has(key);
+        });
+    }
+
     const validation = await validateRevisedEntriesAgainstStructures({
-        entries: updatedConcessions,
+        entries: finalConcessions,
         college: resolvedCollege,
         course: resolvedCourse,
         branch: resolvedBranch,
@@ -463,20 +512,16 @@ const _saveStudentConcessions = async ({
         return { ok: false, message: validation.message, warnings: validation.warnings };
     }
 
-    let approvedRequest = await OverallConcessionRequest.findOne({
-        admissionNumber,
-        status: 'APPROVED'
-    }).sort({ updatedAt: -1, createdAt: -1 });
-
-    let previousFees = approvedRequest ? approvedRequest.concessions || [] : [];
-
-    if (concessions.length === 0) {
+    if (finalConcessions.length === 0) {
         if (approvedRequest) {
-            await OverallConcessionRequest.findByIdAndDelete(approvedRequest._id);
+            await OverallConcessionRequest.deleteMany({
+                admissionNumber,
+                status: 'APPROVED'
+            });
         }
     } else {
         if (approvedRequest) {
-            approvedRequest.concessions = updatedConcessions;
+            approvedRequest.concessions = finalConcessions;
             approvedRequest.studentName = resolvedStudentName || approvedRequest.studentName;
             approvedRequest.pinNo       = resolvedPinNo || approvedRequest.pinNo;
             approvedRequest.college     = resolvedCollege || approvedRequest.college;
@@ -487,6 +532,13 @@ const _saveStudentConcessions = async ({
             approvedRequest.approvedBy  = user?.username || approvedRequest.approvedBy || 'system';
             approvedRequest.approvedByName = user?.name || approvedRequest.approvedByName || 'System';
             await approvedRequest.save();
+
+            // Clean up any stray duplicate APPROVED records for this student
+            await OverallConcessionRequest.deleteMany({
+                admissionNumber,
+                status: 'APPROVED',
+                _id: { $ne: approvedRequest._id }
+            });
         } else {
             await OverallConcessionRequest.create({
                 admissionNumber,
@@ -497,7 +549,7 @@ const _saveStudentConcessions = async ({
                 branch:          resolvedBranch || '',
                 batch:           resolvedBatch || '',
                 category:        resolvedCategory || 'Regular',
-                concessions:     updatedConcessions,
+                concessions:     finalConcessions,
                 status:          'APPROVED',
                 requestedBy:     user?.username || 'system',
                 requestedByName: user?.name || 'System',
@@ -507,17 +559,7 @@ const _saveStudentConcessions = async ({
         }
     }
 
-    const nextKeys = new Set(
-        updatedConcessions
-            .filter(e => normalizeConcessionType(e.concessionType) === 'REVISED')
-            .map(e => `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`)
-    );
-    const removedRevised = previousFees.filter(e => {
-        if (normalizeConcessionType(e.concessionType) !== 'REVISED') return false;
-        const key = `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`;
-        return !nextKeys.has(key);
-    });
-    if (removedRevised.length > 0 || concessions.length === 0) {
+    if (removedRevised.length > 0 || (!merge && concessions.length === 0)) {
         await cancelDeclarationConcessionTransactions({
             admissionNumber,
             entries: concessions.length === 0 ? previousFees : removedRevised,
@@ -547,7 +589,7 @@ const _saveStudentConcessions = async ({
         }
     }
 
-    return { ok: true, updatedConcessions };
+    return { ok: true, updatedConcessions: finalConcessions };
 };
 
 // @desc    Bulk Assign, Update or Delete revised fees (concessions) for a student
@@ -555,7 +597,7 @@ const _saveStudentConcessions = async ({
 const bulkSaveOverallConcessions = async (req, res) => {
     const { 
         admissionNumber, pinNo, studentName, college, course, branch, batch,
-        category, concessions
+        category, concessions, merge = false
     } = req.body;
 
     if (!admissionNumber || !Array.isArray(concessions)) {
@@ -568,7 +610,8 @@ const bulkSaveOverallConcessions = async (req, res) => {
 
         const result = await _saveStudentConcessions({
             admissionNumber, pinNo, studentName, college, course,
-            branch, batch, category, concessions, feeHeads, codeMap, user: req.user
+            branch, batch, category, concessions, feeHeads, codeMap, user: req.user,
+            merge
         });
 
         if (!result.ok) {
@@ -630,7 +673,8 @@ const bulkSaveMultipleStudents = async (req, res) => {
                         batch: s.batch,
                         category: s.category,
                         concessions: s.concessions,
-                        feeHeads, codeMap, user: req.user
+                        feeHeads, codeMap, user: req.user,
+                        merge: true // Prevent bulk updates from overwriting or cancelling other fee heads
                     });
                     return { ...result, admissionNumber: s.admissionNumber };
                 })
@@ -1104,6 +1148,11 @@ const approveConcessionRequest = async (req, res) => {
         request.approvedByName   = req.user?.name || '';
         request.concessionGivenBy = concessionGivenBy || '';
         await request.save();
+
+        // Clean up any older/superseded approved request for this student to prevent duplicate records
+        if (approvedRequest && approvedRequest._id.toString() !== request._id.toString()) {
+            await OverallConcessionRequest.findByIdAndDelete(approvedRequest._id);
+        }
 
         // 2. Re-sync MongoDB StudentFee amounts & apply revised transactions once using preloaded feeHeads
         if (student) {
