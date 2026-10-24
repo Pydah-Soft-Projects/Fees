@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '../lib/api';
 import Sidebar from './Sidebar';
-import { Search, Filter, Trash2, Plus, User, Award, ShieldAlert, Check, Eye, Clock, CheckCircle, XCircle, Send, X, Pencil, Save, BookOpen, Printer, ChevronDown, ChevronUp, LayoutGrid, MessageSquare } from 'lucide-react';
+import { Search, Filter, Trash2, Plus, User, Award, ShieldAlert, Check, Eye, Clock, CheckCircle, XCircle, Send, X, Pencil, Save, BookOpen, Printer, ChevronDown, ChevronUp, LayoutGrid, MessageSquare, Download, FileSpreadsheet, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx-js-style';
 import { printHtmlDocument } from '../utils/printService';
 
 // ─── Status badge helper ───────────────────────────────────────────────────
@@ -281,10 +282,13 @@ const OverallConcession = () => {
     const [bulkError,          setBulkError]          = useState('');
     const [bulkHeadDropOpen,   setBulkHeadDropOpen]   = useState(false);
 
-    // ── view overview list filter + print ─────────────────────────────────
+    // ── view overview list filter + print / download ─────────────────────
     const [viewListMode,      setViewListMode]      = useState('all'); // 'all' | 'revised'
     const [viewQuotaFilter,   setViewQuotaFilter]    = useState('');
     const [viewPrintBusy,     setViewPrintBusy]     = useState(false);
+    const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+    const [downloadScope,     setDownloadScope]     = useState('all');
+    const [viewExcelBusy,     setViewExcelBusy]     = useState(false);
 
     // ── pending requests map (admissionNumber → true) for badge ──────────
     const [pendingAdmSet, setPendingAdmSet] = useState(new Set());
@@ -611,10 +615,348 @@ const OverallConcession = () => {
                 }
             });
             printHtmlDocument(res.data);
+            setDownloadModalOpen(false);
         } catch (err) {
             alert('Print failed: ' + (err.response?.data?.message || err.message));
         } finally {
             setViewPrintBusy(false);
+        }
+    };
+
+    const handleViewExcel = async (mode) => {
+        const includeAll = mode === 'all';
+        const quotaFiltered = getViewQuotaFilteredStudents(students);
+
+        const selectedStudents = includeAll
+            ? quotaFiltered
+            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0);
+
+        if (selectedStudents.length === 0) {
+            alert(includeAll ? 'No students loaded to export.' : 'No revised-fee students to export.');
+            return;
+        }
+
+        setViewExcelBusy(true);
+        try {
+            const requests = selectedStudents.map(s => ({
+                _id: s.admission_number,
+                studentName: s.student_name,
+                admissionNumber: s.admission_number,
+                pinNo: s.pin_no,
+                college: s.college,
+                course: s.course,
+                branch: s.branch,
+                batch: s.batch,
+                concessions: (s.revisedFees || [])
+                    .map(rf => {
+                        const fhId = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                        const amt = Number(rf.amount ?? rf.revisedAmount ?? 0);
+                        return {
+                            feeHeadId: fhId,
+                            feeHeadCode: rf.feeHeadCode || '',
+                            feeHeadName: getFeeHeadName(fhId, rf.feeHeadCode),
+                            studentYear: rf.studentYear,
+                            semester: rf.semester ?? null,
+                            amount: amt,
+                            concessionType: normalizeConcessionType(rf.concessionType),
+                            remarks: rf.remarks || ''
+                        };
+                    })
+                    .filter(c => Number.isFinite(c.amount) && c.amount >= 0)
+            }));
+
+            const sortedReqs = [...requests].sort((a, b) => {
+                const nameCmp = String(a.studentName || '').localeCompare(String(b.studentName || ''));
+                if (nameCmp !== 0) return nameCmp;
+                return String(a.admissionNumber || '').localeCompare(String(b.admissionNumber || ''));
+            });
+
+            // Union of fee heads across all students (identical to PDF template)
+            const feeHeadMap = new Map();
+            const yearsSet = new Set();
+            sortedReqs.forEach((req) => {
+                (req.concessions || []).forEach((c) => {
+                    const yr = Number(c.studentYear);
+                    if (Number.isFinite(yr) && yr > 0) yearsSet.add(yr);
+
+                    const hid = String(c.feeHeadId);
+                    if (!feeHeadMap.has(hid)) {
+                        feeHeadMap.set(hid, {
+                            name: c.feeHeadName || c.feeHeadCode || hid,
+                            code: c.feeHeadCode || ''
+                        });
+                    }
+                });
+            });
+
+            // Calculate popularity of fee heads across students
+            const feeHeadPopularity = {};
+            sortedReqs.forEach((req) => {
+                (req.concessions || []).forEach((c) => {
+                    const hid = String(c.feeHeadId);
+                    if (hid) {
+                        feeHeadPopularity[hid] = (feeHeadPopularity[hid] || 0) + 1;
+                    }
+                });
+            });
+
+            const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) => {
+                const countA = feeHeadPopularity[a[0]] || 0;
+                const countB = feeHeadPopularity[b[0]] || 0;
+                if (countA !== countB) {
+                    return countB - countA;
+                }
+                return String(a[1].name || '').localeCompare(String(b[1].name || ''));
+            });
+
+            const courseYearsHint = Number(courseYears[filters.course]);
+            let years = [...yearsSet].sort((a, b) => a - b);
+            if (Number.isFinite(courseYearsHint) && courseYearsHint > 0) {
+                years = Array.from({ length: courseYearsHint }, (_, i) => i + 1);
+            } else if (years.length === 0) {
+                years = [1, 2, 3, 4];
+            }
+
+            const amountLookup = {};
+            const remarksLookup = {};
+            sortedReqs.forEach((req) => {
+                const adm = String(req.admissionNumber || '');
+                if (!amountLookup[adm]) amountLookup[adm] = {};
+                if (!remarksLookup[adm]) remarksLookup[adm] = {};
+                (req.concessions || []).forEach((c) => {
+                    const hid = String(c.feeHeadId);
+                    const yr = Number(c.studentYear);
+                    if (!amountLookup[adm][hid]) amountLookup[adm][hid] = {};
+                    amountLookup[adm][hid][yr] = {
+                        amount: Number(c.amount ?? 0),
+                        type: c.concessionType || 'REVISED'
+                    };
+                    if (c.remarks) {
+                        remarksLookup[adm][yr] = c.remarks;
+                    }
+                });
+            });
+
+            const yrSfx = (yr) => yr === 1 ? '1st' : yr === 2 ? '2nd' : yr === 3 ? '3rd' : `${yr}th`;
+
+            const filterParts = [];
+            if (filters.college) filterParts.push(filters.college);
+            if (filters.course)  filterParts.push(filters.course);
+            if (filters.branch)  filterParts.push(filters.branch);
+            if (filters.batch)   filterParts.push(`Batch ${filters.batch}`);
+            if (viewQuotaFilter) filterParts.push(`Quota: ${viewQuotaFilter}`);
+            const filterLabel = filterParts.length ? filterParts.join(' · ') : 'All Colleges / Courses / Branches';
+
+            const totalCols = Math.max(6, 5 + feeHeadEntries.length + 1);
+
+            const aoa = [
+                ['PYDAH GROUP OF COLLEGES'],
+                ['OVERALL CONCESSION (REVISED FEES) — OVERVIEW'],
+                [`Filter: ${filterLabel} | Total Students: ${sortedReqs.length} | Generated On: ${new Date().toLocaleString('en-IN')}`],
+                [],
+                [
+                    'S.No',
+                    'Student Name',
+                    'Adm No',
+                    'PIN No',
+                    'Year',
+                    ...feeHeadEntries.map(([_, row]) => row.name || 'Fee Head'),
+                    'Remarks'
+                ]
+            ];
+
+            const merges = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
+                { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } }
+            ];
+
+            sortedReqs.forEach((req, sIdx) => {
+                const adm = String(req.admissionNumber || '');
+                const studentAmounts = amountLookup[adm] || {};
+                const startRow = aoa.length;
+
+                years.forEach((yr, yrIdx) => {
+                    const feeCols = feeHeadEntries.map(([fhId]) => {
+                        const cell = studentAmounts[fhId]?.[yr];
+                        if (!cell) return '—';
+                        const amt = Number(cell.amount ?? 0);
+                        const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
+                        const tagText = isConc ? 'Conc.' : 'Rev.';
+                        return `${isConc ? '-' : ''}₹${amt.toLocaleString('en-IN')} (${tagText})`;
+                    });
+
+                    const remarks = remarksLookup[adm]?.[yr] || '—';
+
+                    aoa.push([
+                        yrIdx === 0 ? sIdx + 1 : '',
+                        yrIdx === 0 ? (req.studentName || '—') : '',
+                        yrIdx === 0 ? (req.admissionNumber || '—') : '',
+                        yrIdx === 0 ? (req.pinNo || '—') : '',
+                        `${yrSfx(yr)} Yr`,
+                        ...feeCols,
+                        remarks
+                    ]);
+                });
+
+                const endRow = aoa.length - 1;
+                if (endRow > startRow) {
+                    merges.push({ s: { r: startRow, c: 0 }, e: { r: endRow, c: 0 } });
+                    merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } });
+                    merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } });
+                    merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } });
+                }
+            });
+
+            aoa.push([]);
+            aoa.push(['This is a computer-generated Overall Concession Report for internal records only.']);
+            merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: totalCols - 1 } });
+
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!merges'] = merges;
+            ws['!cols'] = [
+                { wch: 8 },  // S.No
+                { wch: 28 }, // Student Name
+                { wch: 16 }, // Adm No
+                { wch: 16 }, // PIN No
+                { wch: 12 }, // Year
+                ...feeHeadEntries.map(([_, row]) => ({ wch: Math.max(16, (row.name || '').length + 4) })),
+                { wch: 25 }  // Remarks
+            ];
+
+            // ── Apply styling & colors with centered header section ──────────
+            const borderThin = {
+                top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+                bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+                left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+                right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+            };
+
+            // Style Header Row 0: College Name (Centered in middle, Navy Blue, White bold text)
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: 0, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: '1E3A8A' } },
+                    font: { name: 'Arial', sz: 14, bold: true, color: { rgb: 'FFFFFF' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+
+            // Style Header Row 1: Subtitle (Centered in middle, Royal Blue, White bold text)
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: 1, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: '2563EB' } },
+                    font: { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+
+            // Style Header Row 2: Filter Summary & Date (Centered in middle, Soft Ice Blue)
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: 2, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: 'EFF6FF' } },
+                    font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '1E293B' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+
+            // Style Table Header Row 4: Dark Slate background with white bold text
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: 4, c });
+                if (ws[ref]) {
+                    ws[ref].s = {
+                        fill: { fgColor: { rgb: '0F172A' } },
+                        font: { name: 'Arial', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+                        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                        border: {
+                            top: { style: 'medium', color: { rgb: '0F172A' } },
+                            bottom: { style: 'medium', color: { rgb: '0F172A' } },
+                            left: { style: 'thin', color: { rgb: '334155' } },
+                            right: { style: 'thin', color: { rgb: '334155' } }
+                        }
+                    };
+                }
+            }
+
+            // Style Data Rows
+            let currentStudentRow = 0;
+            sortedReqs.forEach((req, sIdx) => {
+                const bgRgb = sIdx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+                years.forEach(() => {
+                    const rowIdx = 5 + currentStudentRow;
+                    currentStudentRow++;
+
+                    for (let c = 0; c < totalCols; c++) {
+                        const ref = XLSX.utils.encode_cell({ r: rowIdx, c });
+                        if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                        const val = String(ws[ref].v || '');
+
+                        let fontColor = '1E293B';
+                        let isBold = false;
+                        let alignH = 'center';
+
+                        if (c === 1) { // Student Name
+                            alignH = 'left';
+                            isBold = true;
+                        } else if (c === 0 || c === 2 || c === 3 || c === 4) { // S.No, Adm, PIN, Year
+                            alignH = 'center';
+                            if (c === 0 || c === 4) isBold = true;
+                        } else if (c === totalCols - 1) { // Remarks
+                            alignH = 'left';
+                        } else { // Fee heads
+                            alignH = 'center';
+                            if (val.includes('(Rev.)')) {
+                                fontColor = '047857'; // Green
+                                isBold = true;
+                            } else if (val.includes('(Conc.)')) {
+                                fontColor = 'B45309'; // Amber
+                                isBold = true;
+                            } else if (val === '—') {
+                                fontColor = '94A3B8'; // Muted Gray
+                            }
+                        }
+
+                        ws[ref].s = {
+                            fill: { fgColor: { rgb: bgRgb } },
+                            font: { name: 'Arial', sz: 9, bold: isBold, color: { rgb: fontColor } },
+                            alignment: { horizontal: alignH, vertical: 'center' },
+                            border: borderThin
+                        };
+                    }
+                });
+            });
+
+            // Style Footer Note
+            const footerRowIdx = aoa.length - 1;
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: footerRowIdx, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = {
+                    font: { name: 'Arial', sz: 9, italic: true, color: { rgb: '64748B' } },
+                    alignment: { horizontal: 'center', vertical: 'center' }
+                };
+            }
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'ConcessionsOverview');
+
+            const fileCollege = (filters.college || 'College').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileCourse = (filters.course || 'Course').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileBatch = (filters.batch || 'Batch').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const fileScope = mode === 'revised' ? 'RevisedOnly' : 'All';
+            const fileName = `Overall_Concessions_${fileCollege}_${fileCourse}_${fileBatch}_${fileScope}.xlsx`;
+
+            XLSX.writeFile(wb, fileName);
+            setDownloadModalOpen(false);
+        } catch (err) {
+            alert('Excel export failed: ' + (err.message || 'Unknown error'));
+        } finally {
+            setViewExcelBusy(false);
         }
     };
 
@@ -1735,6 +2077,7 @@ const OverallConcession = () => {
                         });
 
                         return (
+                        <>
                         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-fadeIn">
                             <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
                                 <div className="flex items-center gap-3 flex-wrap">
@@ -1776,13 +2119,16 @@ const OverallConcession = () => {
 
                                     <button
                                         type="button"
-                                        onClick={() => handleViewPrint(viewListMode)}
-                                        disabled={loading || viewPrintBusy || viewStudents.length === 0}
-                                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                                        title={viewStudents.length === 0 ? 'No students to print for this filter.' : `Print ${viewListMode === 'revised' ? 'revised-only' : 'all'} students`}
+                                        onClick={() => {
+                                            setDownloadScope(viewListMode);
+                                            setDownloadModalOpen(true);
+                                        }}
+                                        disabled={loading || viewStudents.length === 0}
+                                        className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                        title={viewStudents.length === 0 ? 'No students to download for this filter.' : `Download ${viewListMode === 'revised' ? 'revised-only' : 'all'} students`}
                                     >
-                                        <Printer size={14} />
-                                        {viewPrintBusy ? 'Printing...' : `Print (${viewStudents.length})`}
+                                        <Download size={14} />
+                                        Download ({viewStudents.length})
                                     </button>
                                 </div>
                             </div>
@@ -1950,6 +2296,130 @@ const OverallConcession = () => {
                                 </table>
                             </div>
                         </div>
+
+                        {/* Download Options Modal */}
+                        {downloadModalOpen && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-fadeIn"
+                                onClick={() => setDownloadModalOpen(false)}>
+                                <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden animate-scaleIn flex flex-col"
+                                    onClick={e => e.stopPropagation()}>
+                                    {/* Modal Header */}
+                                    <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                                                <Download size={16} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-slate-800">Export Concessions Roster</h3>
+                                                <p className="text-[11px] text-slate-500 font-medium">Select a format to download the roster data</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => setDownloadModalOpen(false)}
+                                            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition cursor-pointer"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+
+                                    {/* Modal Body */}
+                                    <div className="p-5 space-y-4">
+                                        {/* Scope selector */}
+                                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                                                Data Scope to Download
+                                            </label>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDownloadScope('all')}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                                        downloadScope === 'all'
+                                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    <span>All Students</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${downloadScope === 'all' ? 'bg-blue-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                                        {quotaFilteredStudents.length}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDownloadScope('revised')}
+                                                    className={`px-3 py-2 rounded-lg text-xs font-bold border transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                                        downloadScope === 'revised'
+                                                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    <span>Revised only</span>
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${downloadScope === 'revised' ? 'bg-emerald-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                                                        {revisedCount}
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Format Cards - Just Icons with Name Below */}
+                                        <div className="grid grid-cols-2 gap-4 pt-1">
+                                            {/* Excel Option */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleViewExcel(downloadScope)}
+                                                disabled={viewExcelBusy || viewPrintBusy || (downloadScope === 'revised' ? revisedCount === 0 : quotaFilteredStudents.length === 0)}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 hover:shadow-md transition-all group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-white"
+                                                title="Download Excel Sheet"
+                                            >
+                                                <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform mb-2.5 shadow-xs">
+                                                    {viewExcelBusy ? (
+                                                        <span className="animate-spin h-6 w-6 border-2 border-emerald-600 border-t-transparent rounded-full"></span>
+                                                    ) : (
+                                                        <FileSpreadsheet size={30} />
+                                                    )}
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-700 transition">
+                                                    Excel (.xlsx)
+                                                </span>
+                                            </button>
+
+                                            {/* PDF Option */}
+                                            <button
+                                                type="button"
+                                                onClick={() => handleViewPrint(downloadScope)}
+                                                disabled={viewExcelBusy || viewPrintBusy || (downloadScope === 'revised' ? revisedCount === 0 : quotaFilteredStudents.length === 0)}
+                                                className="flex flex-col items-center justify-center p-5 rounded-2xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 hover:shadow-md transition-all group cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-white"
+                                                title="Download / Print PDF"
+                                            >
+                                                <div className="w-14 h-14 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform mb-2.5 shadow-xs">
+                                                    {viewPrintBusy ? (
+                                                        <span className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full"></span>
+                                                    ) : (
+                                                        <FileText size={30} />
+                                                    )}
+                                                </div>
+                                                <span className="text-xs font-bold text-slate-800 group-hover:text-blue-700 transition">
+                                                    PDF (.pdf)
+                                                </span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Modal Footer */}
+                                    <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setDownloadModalOpen(false)}
+                                            className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
+                                        >
+                                            Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        </>
                         );
                     })()}
 
