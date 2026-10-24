@@ -311,7 +311,24 @@ const detectExcelHeaderRow = (rows, maxScan = 10) => {
     for (let r = 0; r < limit; r++) {
         const headers = (rows[r] || []).map(normalizeExcelHeader);
         if (!headers.some(Boolean)) continue;
-        const ranked = rankExcelColumns(headers);
+        let ranked = rankExcelColumns(headers);
+
+        // If share or app col is not found, try combining with adjacent row (for 2-line wrapped headers)
+        if ((ranked.appCol < 0 || ranked.shareCol < 0) && r + 1 < limit) {
+            const nextRow = rows[r + 1] || [];
+            const maxCols = Math.max(rows[r].length, nextRow.length);
+            const combinedHeaders = [];
+            for (let c = 0; c < maxCols; c++) {
+                const top = String(rows[r]?.[c] ?? '').trim();
+                const btm = String(nextRow?.[c] ?? '').trim();
+                combinedHeaders.push(normalizeExcelHeader(top ? (btm ? `${top}_${btm}` : top) : btm));
+            }
+            const combinedRanked = rankExcelColumns(combinedHeaders);
+            if (combinedRanked.score > ranked.score) {
+                ranked = combinedRanked;
+            }
+        }
+
         if (ranked.score > best.score) {
             best = { rowIdx: r, ...ranked };
         }
@@ -692,12 +709,16 @@ const parseProceedingPdfFile = async (file, onProgress) => {
     let hasShareColumn = false;
     const pagePlainTexts = new Array(pdf.numPages).fill('');
 
+    let docAmountColX = null;
+    let docAppIdColX = null;
+    let docBankAccColX = null;
+
     const extractFromPageItems = (rawItems) => {
         const localEntries = [];
         let localHasShare = false;
-        let amountColX = null;
-        let appIdColX = null;
-        let bankAccColX = null;
+        let amountColX = docAmountColX;
+        let appIdColX = docAppIdColX;
+        let bankAccColX = docBankAccColX;
         const items = [];
         let plainParts = '';
 
@@ -728,25 +749,61 @@ const parseProceedingPdfFile = async (file, onProgress) => {
         }
 
         const rows = [...rowMap.values()].sort((a, b) => b.y - a.y);
+
+        // Header detection pass: scan rows before the first student data row
         for (let r = 0; r < rows.length; r++) {
             const cells = rows[r].cells.sort((a, b) => a.x - b.x);
             const joined = cells.map((c) => c.text).join(' ');
 
-            // Header row: lock Released Amount, App ID, and Bank Account column X
+            // Stop header scan once we encounter actual student data row
+            if (cells.some((c) => looksLikeStudentIdToken(c.text.replace(/\s+/g, '')))) {
+                break;
+            }
+
+            // Skip title/banner lines (e.g. "Student Wise RTF Released Amount Report...")
+            const isTitle = /report\s+for\s+proceeding|proceeding\s+no|student\s+wise.*report/i.test(joined);
+            if (isTitle) continue;
+
+            // 1. Released Amount header column (supports single-line or multi-line wrapped headers)
             if (/released\s*amount/i.test(joined) || (/released/i.test(joined) && /amount/i.test(joined))) {
                 localHasShare = true;
                 const releasedCell = cells.find((c) => /released/i.test(c.text))
                     || cells.find((c) => /^amount$/i.test(c.text.trim()));
                 if (releasedCell) amountColX = releasedCell.x;
+            } else {
+                const relCell = cells.find((c) => /^released$/i.test(c.text.trim()));
+                const amtCell = cells.find((c) => /^amount$/i.test(c.text.trim()));
+                if (relCell) {
+                    amountColX = relCell.x;
+                    localHasShare = true;
+                } else if (amtCell && amountColX == null) {
+                    amountColX = amtCell.x;
+                    localHasShare = true;
+                }
             }
-            if (/student\s*id|application|app\s*id|registration/i.test(joined)) {
-                const appCell = cells.find((c) => /application|app|student|id|reg/i.test(c.text));
+
+            // 2. Student ID / Application ID column
+            if (/\b(?:student\s*id|application(?:\s*id|\s*no)?|app\s*id|reg(?:istration)?(?:\s*no)?)\b/i.test(joined)) {
+                const appCell = cells.find((c) => /\b(?:application|app\s*id|student\s*id|reg(?:istration)?)\b/i.test(c.text)
+                    || (/student/i.test(c.text) && !/name|type|status/i.test(c.text)));
                 if (appCell) appIdColX = appCell.x;
             }
-            if (/account|bank|a\/c|acc\s*no/i.test(joined)) {
-                const bankCell = cells.find((c) => /account|bank|a\/c|acc/i.test(c.text));
+
+            // 3. Bank Account / Status column
+            if (/\b(?:account|bank|a\/c|acc\s*no|status)\b/i.test(joined)) {
+                const bankCell = cells.find((c) => /\b(?:account|bank|a\/c|acc|status)\b/i.test(c.text));
                 if (bankCell) bankAccColX = bankCell.x;
             }
+        }
+
+        // Cache document-level column coordinates once identified
+        if (amountColX != null && docAmountColX == null) docAmountColX = amountColX;
+        if (appIdColX != null && docAppIdColX == null) docAppIdColX = appIdColX;
+        if (bankAccColX != null && docBankAccColX == null) docBankAccColX = bankAccColX;
+
+        // Data extraction pass: headers are locked and never re-detected from data
+        for (let r = 0; r < rows.length; r++) {
+            const cells = rows[r].cells.sort((a, b) => a.x - b.x);
 
             for (let i = 0; i < cells.length; i++) {
                 const cell = cells[i];
