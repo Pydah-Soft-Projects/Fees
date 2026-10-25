@@ -789,6 +789,7 @@ const ConcessionManagement = () => {
                         branch: req.branch,
                         batch: req.batch,
                         requestedBy: req.requestedBy || 'N/A',
+                        concessionGivenBy: req.concessionGivenBy || '',
                         feeHead: req.feeHead,
                         feeHeads: [], // Track unique fee heads
                         reason: req.reason,
@@ -799,6 +800,9 @@ const ConcessionManagement = () => {
                 }
                 voucherMap[groupKey].requests.push(req);
                 voucherMap[groupKey].totalAmount += req.amount;
+                if (!voucherMap[groupKey].concessionGivenBy && req.concessionGivenBy) {
+                    voucherMap[groupKey].concessionGivenBy = req.concessionGivenBy;
+                }
                 
                 // Track unique fee heads in the group
                 if (req.feeHead) {
@@ -1839,21 +1843,22 @@ const ConcessionManagement = () => {
                             {/* Table */}
                             <div className="flex-1 overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
+                                    <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
                                         <tr>
-                                            <th className="py-3.5 px-4 whitespace-nowrap">Requested Date</th>
-                                            <th className="py-3.5 px-4 whitespace-nowrap">Voucher ID</th>
-                                            <th className="py-3.5 px-4 min-w-[180px]">Student Information</th>
-                                            <th className="py-3.5 px-4 whitespace-nowrap">College / Course / Branch</th>
-                                            <th className="py-3.5 px-4 whitespace-nowrap">Fee Head</th>
-                                            <th className="py-3.5 px-4 whitespace-nowrap">Raised By</th>
-                                            <th className="py-3.5 px-4 text-right whitespace-nowrap">Requested Amount</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Voucher ID</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Requested Date</th>
+                                            <th className="py-2.5 px-3 min-w-[160px]">Student Information</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">College / Course / Branch</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap w-[130px]">Fee Head</th>
+                                            <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Raised By</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Given By</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100">
+                                    <tbody className="bg-white divide-y divide-gray-100 text-xs">
                                         {pendingRequests.length === 0 ? (
                                             <tr>
-                                                <td colSpan="7" className="py-40 text-center">
+                                                <td colSpan="8" className="py-40 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
                                                         <div className="bg-gray-100 p-6 rounded-full border-2 border-dashed border-gray-300 mb-4">
                                                             <Search size={40} className="text-gray-400" />
@@ -1870,55 +1875,67 @@ const ConcessionManagement = () => {
                                                     onClick={() => openModal(group)}
                                                     className="hover:bg-blue-50/60 cursor-pointer transition-all border-b border-gray-100 last:border-0"
                                                 >
-                                                    <td className="py-3.5 px-4 whitespace-nowrap">
-                                                        <span className="text-xs font-bold text-gray-500">{new Date(group.createdAt).toLocaleDateString()}</span>
-                                                    </td>
-                                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
                                                         <div className="flex flex-col">
-                                                            <span className="font-mono text-[10px] font-black bg-gray-100 px-2 py-1 rounded border border-gray-200 text-gray-800 w-fit">
+                                                            <span className="font-mono text-[9.5px] font-black bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-gray-800 w-fit">
                                                                 #{group.voucherId || 'SINGLE'}
                                                             </span>
                                                             {group.requests.length > 1 && (
-                                                                <span className="text-[9px] font-bold text-blue-600 mt-1 uppercase tracking-tighter">Bulk ({group.requests.length})</span>
+                                                                <span className="text-[8.5px] font-bold text-blue-600 mt-0.5 uppercase tracking-tighter">Bulk ({group.requests.length})</span>
                                                             )}
                                                         </div>
                                                     </td>
-                                                    <td className="py-3.5 px-4">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="text-[11px] font-bold text-gray-500">{new Date(group.createdAt).toLocaleDateString()}</span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3">
                                                         <div className="flex flex-col">
-                                                            <span className="text-sm font-bold text-gray-800">
+                                                            <span className="text-xs font-bold text-gray-800">
                                                                 {group.requests.length === 1 ? group.requests[0].studentName : `${group.requests[0].studentName} + ${group.requests.length - 1} more`}
                                                             </span>
-                                                            <span className="text-[10px] text-gray-400 font-bold uppercase">{group.requests[0].studentPin || group.requests[0].studentId}</span>
+                                                            <span className="text-[9.5px] text-gray-400 font-bold uppercase">{group.requests[0].studentPin || group.requests[0].studentId}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
                                                         <div className="flex flex-col">
-                                                            <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-tight">{group.college || group.requests[0]?.college || 'N/A'}</span>
-                                                            <span className="text-xs font-bold text-gray-700">{group.course}</span>
-                                                            <span className="text-[10px] text-gray-400">{group.branch}</span>
+                                                            <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-tight">{group.college || group.requests[0]?.college || 'N/A'}</span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                <span className="text-[11px] font-bold text-gray-700">{group.course}</span>
+                                                                {group.branch && (
+                                                                    <>
+                                                                        <span className="text-gray-300 text-[10px]">·</span>
+                                                                        <span className="text-[10px] text-gray-500 font-medium">{group.branch}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </td>
-                                                    <td className="py-3.5 px-4 whitespace-nowrap">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap max-w-[130px]">
                                                         {group.feeHeads.length > 1 ? (
-                                                            <span className="px-2.5 py-1 rounded bg-amber-50 text-amber-700 text-xs font-bold border border-amber-100 uppercase tracking-tight">
-                                                                Mixed Heads ({group.feeHeads.length})
+                                                            <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-100 uppercase tracking-tight truncate inline-block max-w-full" title={group.feeHeads.map(h => h?.name).join(', ')}>
+                                                                Mixed ({group.feeHeads.length})
                                                             </span>
                                                         ) : (
-                                                            <span className="px-2.5 py-1 rounded bg-indigo-50 text-indigo-700 text-xs font-bold border border-indigo-100 uppercase tracking-tight">
+                                                            <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[10px] font-bold border border-indigo-100 uppercase tracking-tight truncate inline-block max-w-full" title={group.feeHeads[0]?.name || 'N/A'}>
                                                                 {group.feeHeads[0]?.name || 'N/A'}
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="py-3.5 px-4 whitespace-nowrap">
-                                                        <span className="text-xs font-bold text-gray-700 bg-gray-100 px-2.5 py-1 rounded border border-gray-200 inline-block">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap text-right">
+                                                        <div>
+                                                            <span className="text-xs font-black text-gray-900">₹{group.totalAmount.toLocaleString('en-IN')}</span>
+                                                            {group.requests.length > 1 && <div className="text-[9px] text-gray-400 font-bold">Total for {group.requests.length} students</div>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 inline-block">
                                                             {group.requests[0]?.requestedBy || group.requestedBy || 'N/A'}
                                                         </span>
                                                     </td>
-                                                    <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                                                        <div>
-                                                            <span className="text-sm font-black text-gray-900">₹{group.totalAmount.toLocaleString('en-IN')}</span>
-                                                            {group.requests.length > 1 && <div className="text-[10px] text-gray-400 font-bold">Total for {group.requests.length} students</div>}
-                                                        </div>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
+                                                            {group.requests[0]?.concessionGivenBy || group.concessionGivenBy || '—'}
+                                                        </span>
                                                     </td>
                                                     <td className="hidden">
                                                             <button
@@ -2219,30 +2236,31 @@ const ConcessionManagement = () => {
                             {/* Reports Table */}
                             <div className="flex-1 overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
+                                    <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
                                         <tr>
-                                            <th className="py-4 px-6">Entry Date</th>
-                                            <th className="py-4 px-6">Voucher #</th>
-                                            <th className="py-4 px-6">Student Detail</th>
-                                            <th className="py-4 px-6">Fee Component</th>
-                                            <th className="py-4 px-6 text-right">Net Amount</th>
-                                            <th className="py-4 px-6">Approving Authority</th>
-                                            <th className="py-4 px-6 text-right">Final Status</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Voucher ID</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
+                                            <th className="py-2.5 px-3 min-w-[160px]">Student Information</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap w-[130px]">Fee Component</th>
+                                            <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Given By</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Approved By</th>
+                                            <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100">
+                                    <tbody className="bg-white divide-y divide-gray-100 text-xs">
                                         {isReportLoading ? (
                                             <tr>
-                                                <td colSpan="7" className="py-40 text-center">
+                                                <td colSpan="8" className="py-40 text-center">
                                                     <div className="flex flex-col items-center justify-center gap-4">
-                                                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                                        <p className="text-sm font-extrabold text-blue-600 uppercase tracking-widest animate-pulse">Syncing Audit Logs...</p>
+                                                        <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                                        <p className="text-xs font-extrabold text-blue-600 uppercase tracking-widest animate-pulse">Syncing Audit Logs...</p>
                                                     </div>
                                                 </td>
                                             </tr>
                                         ) : reportData.length === 0 ? (
                                             <tr>
-                                                <td colSpan="7" className="py-40 text-center">
+                                                <td colSpan="8" className="py-40 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
                                                         <div className="bg-gray-100 p-6 rounded-full border border-dashed border-gray-300 mb-4">
                                                             <Search size={40} className="text-gray-400" />
@@ -2255,34 +2273,49 @@ const ConcessionManagement = () => {
                                         ) : (
                                             reportData.map(req => (
                                                 <tr key={req._id} className="hover:bg-gray-50/80 transition-all duration-200">
-                                                    <td className="py-4 px-6 text-sm font-bold text-gray-600">{new Date(req.createdAt).toLocaleDateString()}</td>
-                                                    <td className="py-4 px-6">
-                                                        <span className="font-mono text-[10px] font-black bg-gray-100 px-2 py-1 rounded border border-gray-200 text-gray-800">
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="font-mono text-[9.5px] font-black bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-gray-800">
                                                             #{req.voucherId || '---'}
                                                         </span>
                                                     </td>
-                                                    <td className="py-4 px-6">
-                                                        <div className="font-bold text-gray-800 text-sm italic">{req.studentName}</div>
-                                                        <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">{req.studentPin || req.studentId}</div>
-                                                        <div className="text-[10px] text-blue-600 font-extrabold uppercase tracking-tight">{req.college || 'N/A'} - {req.course}</div>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-bold text-gray-500">
+                                                        {new Date(req.createdAt).toLocaleDateString()}
                                                     </td>
-                                                    <td className="py-4 px-6">
-                                                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">{req.feeHead?.name}</span>
-                                                    </td>
-                                                    <td className="py-4 px-6 text-sm font-black text-gray-900 text-right">
-                                                        ₹{req.amount.toLocaleString('en-IN')}
-                                                    </td>
-                                                    <td className="py-4 px-6">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-1.5 h-1.5 rounded-full bg-purple-400"></div>
-                                                            <span className="text-xs font-bold text-purple-700">{req.concessionGivenBy || 'Not Specified'}</span>
+                                                    <td className="py-2.5 px-3">
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-bold text-gray-800">{req.studentName}</span>
+                                                            <span className="text-[9.5px] text-gray-400 font-bold uppercase">{req.studentPin || req.studentId}</span>
+                                                            <div className="flex items-center gap-1.5 mt-0.5">
+                                                                <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-tight">{req.college || 'N/A'}</span>
+                                                                <span className="text-gray-300 text-[10px]">·</span>
+                                                                <span className="text-[10px] text-gray-500 font-medium">{req.course} {req.branch ? `(${req.branch})` : ''}</span>
+                                                            </div>
                                                         </div>
                                                     </td>
-                                                    <td className="py-4 px-6 text-right">
-                                                        <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-gray-100 ${req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                    <td className="py-2.5 px-3 whitespace-nowrap max-w-[130px]">
+                                                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-tight truncate inline-block max-w-full">
+                                                            {req.feeHead?.name || (typeof req.feeHead === 'string' ? req.feeHead : 'Concession')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap text-right">
+                                                        <span className="text-xs font-black text-gray-900">₹{req.amount.toLocaleString('en-IN')}</span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
+                                                            {req.concessionGivenBy || '—'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
+                                                            {req.approvedBy || (req.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap text-center">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                                            req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                                             req.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                                'bg-amber-50 text-amber-700 border-amber-200'
-                                                            }`}>
+                                                            'bg-amber-50 text-amber-700 border-amber-200'
+                                                        }`}>
                                                             {req.status}
                                                         </span>
                                                     </td>
@@ -2291,15 +2324,15 @@ const ConcessionManagement = () => {
                                         )}
                                     </tbody>
                                     {!isReportLoading && reportData.length > 0 && (
-                                        <tfoot className="bg-gray-50/50 border-t-2 border-gray-200">
+                                        <tfoot className="bg-gray-50/50 border-t-2 border-gray-200 text-xs">
                                             <tr>
-                                                <td colSpan="4" className="py-5 px-6 text-right font-black text-gray-500 text-[10px] uppercase tracking-[0.2em]">Grand Aggregate Totals</td>
-                                                <td className="py-5 px-6 text-right">
-                                                    <span className="text-xl font-black text-blue-900 bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 shadow-sm">
+                                                <td colSpan="4" className="py-3 px-3 text-right font-black text-gray-500 text-[9.5px] uppercase tracking-widest">Grand Aggregate Totals</td>
+                                                <td className="py-3 px-3 text-right">
+                                                    <span className="text-xs font-black text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 shadow-xs">
                                                         ₹{reportData.reduce((sum, item) => sum + item.amount, 0).toLocaleString('en-IN')}
                                                     </span>
                                                 </td>
-                                                <td colSpan="2" className="py-5 px-6"></td>
+                                                <td colSpan="3" className="py-3 px-3"></td>
                                             </tr>
                                         </tfoot>
                                     )}
@@ -2372,28 +2405,58 @@ const ConcessionManagement = () => {
                                                         </span>
                                                     </div>
                                                     <div className="bg-white p-2 rounded-xl border border-gray-200/80">
-                                                        <span className="text-gray-400 font-bold block text-[9px] uppercase">Authorized By</span>
-                                                        <span className="font-bold text-purple-700 truncate block">{selectedRequest.requests[0].concessionGivenBy || 'Not Specified'}</span>
+                                                        <span className="text-gray-400 font-bold block text-[9px] uppercase">Raised By</span>
+                                                        <span className="font-bold text-gray-800 truncate block">{selectedRequest.requests[0]?.requestedBy || selectedRequest.requestedBy || 'N/A'}</span>
                                                     </div>
-                                                    <div className="bg-white p-2 rounded-xl border border-blue-200 col-span-2 flex items-center justify-between px-3">
+                                                    <div className="bg-white p-2 rounded-xl border border-gray-200/80">
+                                                        <span className="text-gray-400 font-bold block text-[9px] uppercase">Given By</span>
+                                                        <span className="font-bold text-purple-700 truncate block">{selectedRequest.requests[0]?.concessionGivenBy || selectedRequest.concessionGivenBy || 'Not Specified'}</span>
+                                                    </div>
+                                                    <div className="bg-white p-2 rounded-xl border border-emerald-200/80 bg-emerald-50/20">
+                                                        <span className="text-emerald-700 font-bold block text-[9px] uppercase">Approved By</span>
+                                                        <span className="font-bold text-emerald-800 truncate block">
+                                                            {selectedRequest.requests[0]?.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                        </span>
+                                                    </div>
+                                                    <div className="bg-white p-2 rounded-xl border border-blue-200 col-span-2 sm:col-span-3 flex items-center justify-between px-3">
                                                         <span className="text-gray-500 font-extrabold text-[9px] uppercase">Requested Amount</span>
-                                                        <span className="text-lg font-black text-blue-700 font-sans">₹{selectedRequest.totalAmount.toLocaleString('en-IN')}</span>
+                                                        <span className="text-base font-black text-blue-700 font-sans">₹{selectedRequest.totalAmount.toLocaleString('en-IN')}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         ) : (
                                             /* BULK REQUEST DISPLAY */
                                             <div className="bg-gray-50 p-3 sm:p-4 rounded-2xl border border-gray-200 space-y-3">
-                                                <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-gray-200 shadow-xs">
+                                                <div className="flex flex-wrap justify-between items-center gap-2 bg-white p-2.5 rounded-xl border border-gray-200 shadow-xs">
                                                     <div>
                                                         <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Voucher Number</span>
                                                         <span className="font-mono text-sm font-black text-blue-600">#{selectedRequest.voucherId}</span>
                                                     </div>
-                                                    <div className="text-right">
-                                                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Fee Component</span>
-                                                        <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-xs border border-indigo-100">
-                                                            {selectedRequest.feeHead?.name || selectedRequest.requests[0]?.feeHead?.name || 'N/A'}
-                                                        </span>
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <div className="text-right">
+                                                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Raised By</span>
+                                                            <span className="font-bold text-gray-700 text-xs block">
+                                                                {selectedRequest.requests[0]?.requestedBy || selectedRequest.requestedBy || 'N/A'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right border-l pl-2">
+                                                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Given By</span>
+                                                            <span className="font-bold text-purple-700 text-xs block">
+                                                                {selectedRequest.requests[0]?.concessionGivenBy || selectedRequest.concessionGivenBy || '—'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right border-l pl-2">
+                                                            <span className="text-[9px] text-emerald-700 font-bold uppercase tracking-widest block">Approved By</span>
+                                                            <span className="font-bold text-emerald-700 text-xs block">
+                                                                {selectedRequest.requests[0]?.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-right border-l pl-2">
+                                                            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Fee Component</span>
+                                                            <span className="font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-xs border border-indigo-100">
+                                                                {selectedRequest.feeHead?.name || selectedRequest.requests[0]?.feeHead?.name || 'N/A'}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                                 
