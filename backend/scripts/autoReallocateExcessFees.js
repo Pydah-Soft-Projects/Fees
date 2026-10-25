@@ -171,7 +171,7 @@ async function main() {
     const allAdmissionNos = students.map(s => s.admission_number);
     console.log(`Pre-fetching fee demands and transactions for ${allAdmissionNos.length} student(s)...`);
 
-    // Only take transactions before July 1, 2026
+    // Only take payments (DEBIT) before July 1, 2026. CREDIT (concessions) are always included.
     const CUTOFF_DATE = new Date('2026-07-01T00:00:00+05:30');
 
     const [allDemands, allTxns] = await Promise.all([
@@ -183,8 +183,16 @@ async function main() {
         studentId: { $in: allAdmissionNos },
         status: 'active',
         $or: [
-          { paymentDate: { $lt: CUTOFF_DATE } },
-          { paymentDate: { $in: [null, undefined] }, createdAt: { $lt: CUTOFF_DATE } }
+          // All active CREDIT transactions (concessions/waivers) are always included
+          { transactionType: 'CREDIT' },
+          // Payment transactions before cutoff
+          {
+            paymentDate: { $lt: CUTOFF_DATE }
+          },
+          {
+            paymentDate: { $in: [null, undefined] },
+            createdAt: { $lt: CUTOFF_DATE }
+          }
         ]
       }).sort({ paymentDate: -1, createdAt: -1 }).lean()
     ]);
@@ -204,7 +212,7 @@ async function main() {
       txnsByStudentMap.get(sId).push(t);
     }
 
-    console.log(`✓ Pre-fetched ${allDemands.length} demand records and ${allTxns.length} transactions (before 01-Jul-2026) across batch.\n`);
+    console.log(`✓ Pre-fetched ${allDemands.length} demand records and ${allTxns.length} transactions across batch (payments before 01-Jul-2026, all concessions included).\n`);
 
     for (const student of students) {
       const admissionNo = student.admission_number;
@@ -236,13 +244,16 @@ async function main() {
         }
       }
 
-      // 2. Filter active transactions for current year (strictly before July 1, 2026)
+      // 2. Filter active transactions for current year (all CREDIT concessions included, DEBITs before cutoff)
       const rawTxns = txnsByStudentMap.get(admissionNo) || [];
       const txns = rawTxns.filter(t => {
         const matchesYear = Number(t.studentYear) === studentYear || String(t.studentYear) === String(studentYear);
+        if (!matchesYear) return false;
+        // Always include CREDIT (concession) transactions regardless of cutoff date
+        if (t.transactionType === 'CREDIT') return true;
         const tDate = t.paymentDate ? new Date(t.paymentDate) : (t.createdAt ? new Date(t.createdAt) : null);
         const isBeforeCutoff = tDate ? tDate < CUTOFF_DATE : true;
-        return matchesYear && isBeforeCutoff;
+        return isBeforeCutoff;
       });
 
       // Aggregate payments (DEBIT) and concessions (CREDIT) per fee head

@@ -193,19 +193,17 @@ const saveOverallConcession = async (req, res) => {
             remarks
         });
 
-        if (normalizeConcessionType(storedEntry.concessionType) === 'REVISED') {
-            const validation = await validateRevisedEntriesAgainstStructures({
-                entries: [storedEntry],
-                college: resolvedCollege,
-                course: resolvedCourse,
-                branch: resolvedBranch,
-                batch: resolvedBatch,
-                category: resolvedCategory,
-                admissionNumber
-            });
-            if (!validation.ok) {
-                return res.status(400).json({ message: validation.message, warnings: validation.warnings });
-            }
+        const validation = await validateRevisedEntriesAgainstStructures({
+            entries: [storedEntry],
+            college: resolvedCollege,
+            course: resolvedCourse,
+            branch: resolvedBranch,
+            batch: resolvedBatch,
+            category: resolvedCategory,
+            admissionNumber
+        });
+        if (!validation.ok) {
+            return res.status(400).json({ message: validation.message, warnings: validation.warnings });
         }
 
         // 1. Fetch existing approved request from MongoDB
@@ -488,11 +486,9 @@ const _saveStudentConcessions = async ({
     } else {
         const nextKeys = new Set(
             updatedConcessions
-                .filter(e => normalizeConcessionType(e.concessionType) === 'REVISED')
                 .map(e => `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`)
         );
         removedRevised = previousFees.filter(e => {
-            if (normalizeConcessionType(e.concessionType) !== 'REVISED') return false;
             const key = `${e.feeHeadId}_${Number(e.studentYear)}_${normalizeSemester(e.semester) ?? 'null'}`;
             return !nextKeys.has(key);
         });

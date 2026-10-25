@@ -85,19 +85,19 @@ const validateRevisedEntriesAgainstStructures = async ({
   }
 
   const warnings = [];
-  const revisedEntries = (entries || []).filter(
-    (e) => normalizeConcessionType(e.concessionType) === 'REVISED'
+  const validEntries = (entries || []).filter(
+    (e) => Boolean(e && (e.feeHeadId || e.feeHeadCode) && e.studentYear)
   );
 
-  if (revisedEntries.length === 0) {
+  if (validEntries.length === 0) {
     return { ok: true, warnings: [], message: '' };
   }
 
   // Batch-fetch all relevant structures in one query instead of one per entry.
   const feeHeadIds = [...new Set(
-    revisedEntries.map(e => resolveFeeHeadId(e, codeMap) || String(e.feeHeadId || '')).filter(Boolean)
+    validEntries.map(e => resolveFeeHeadId(e, codeMap) || String(e.feeHeadId || '')).filter(Boolean)
   )];
-  const studentYears = [...new Set(revisedEntries.map(e => Number(e.studentYear)).filter(Boolean))];
+  const studentYears = [...new Set(validEntries.map(e => Number(e.studentYear)).filter(Boolean))];
 
   const structures = await FeeStructure.find({
     feeHead: { $in: feeHeadIds },
@@ -122,15 +122,16 @@ const validateRevisedEntriesAgainstStructures = async ({
     }
   }
 
-  for (const entry of revisedEntries) {
+  for (const entry of validEntries) {
     const feeHeadId = resolveFeeHeadId(entry, codeMap) || String(entry.feeHeadId || '');
     const studentYear = Number(entry.studentYear);
     const semester = normalizeSemester(entry.semester);
-    const revisedAmount = getConcessionAmount(entry);
+    const entryAmount = getConcessionAmount(entry);
     const label = entry.feeHeadCode || feeHeadId;
+    const cType = normalizeConcessionType(entry.concessionType);
 
     if (!feeHeadId || !studentYear) {
-      warnings.push(`Invalid REVISED entry for fee head ${label}.`);
+      warnings.push(`Invalid concession entry for fee head ${label}.`);
       continue;
     }
 
@@ -138,6 +139,10 @@ const validateRevisedEntriesAgainstStructures = async ({
     const structure = structureMap[key];
 
     if (!structure) continue;
+
+    if (cType === 'CONCESSION' && entryAmount > Number(structure.amount || 0)) {
+      warnings.push(`Concession discount for ${label} (₹${entryAmount}) exceeds standard structure fee (₹${structure.amount}).`);
+    }
   }
 
   return {
@@ -441,17 +446,17 @@ const applyRevisedConcessionTransactions = async ({
     maps = buildFeeHeadMaps(feeHeads).codeMap;
   }
 
-  const revisedEntries = (entries || []).filter(
-    (e) => normalizeConcessionType(e.concessionType) === 'REVISED'
+  const targetEntries = (entries || []).filter(
+    (e) => Boolean(e && (e.feeHeadId || e.feeHeadCode) && e.studentYear)
   );
 
-  if (revisedEntries.length === 0) return { created: 0, updated: 0, cancelled: 0, skipped: 0 };
+  if (targetEntries.length === 0) return { created: 0, updated: 0, cancelled: 0, skipped: 0 };
 
   // ── Batch-fetch all needed fee structures in one query ──
   const feeHeadIds = [...new Set(
-    revisedEntries.map(e => resolveFeeHeadId(e, maps) || String(e.feeHeadId || '')).filter(Boolean)
+    targetEntries.map(e => resolveFeeHeadId(e, maps) || String(e.feeHeadId || '')).filter(Boolean)
   )];
-  const studentYears = [...new Set(revisedEntries.map(e => Number(e.studentYear)).filter(Boolean))];
+  const studentYears = [...new Set(targetEntries.map(e => Number(e.studentYear)).filter(Boolean))];
 
   const allStructures = await FeeStructure.find({
     feeHead: { $in: feeHeadIds },
@@ -521,11 +526,12 @@ const applyRevisedConcessionTransactions = async ({
   let cancelled = 0;
   let skipped = 0;
 
-  for (const entry of revisedEntries) {
+  for (const entry of targetEntries) {
     const feeHeadId = resolveFeeHeadId(entry, maps) || String(entry.feeHeadId || '');
     const studentYear = Number(entry.studentYear);
     const semester = normalizeSemester(entry.semester);
-    const revisedAmount = getConcessionAmount(entry);
+    const rawAmount = getConcessionAmount(entry);
+    const cType = normalizeConcessionType(entry.concessionType);
 
     if (!feeHeadId || !studentYear) {
       skipped += 1;
@@ -559,10 +565,17 @@ const applyRevisedConcessionTransactions = async ({
     let concessionAmount = 0;
     let extraDemandAmount = 0;
 
-    if (revisedAmount > structureAmount) {
-      extraDemandAmount = revisedAmount - structureAmount;
+    if (cType === 'CONCESSION') {
+      // CONCESSION: rawAmount is the concession discount amount
+      concessionAmount = Math.max(0, Math.min(structureAmount, rawAmount));
+      extraDemandAmount = 0;
     } else {
-      concessionAmount = structureAmount - revisedAmount;
+      // REVISED: rawAmount is the revised target fee student pays
+      if (rawAmount > structureAmount) {
+        extraDemandAmount = rawAmount - structureAmount;
+      } else {
+        concessionAmount = structureAmount - rawAmount;
+      }
     }
 
     // Upsert credit concession transaction
@@ -616,7 +629,7 @@ const cancelDeclarationConcessionTransactions = async ({
 
   let cancelled = 0;
   for (const entry of entries || []) {
-    if (normalizeConcessionType(entry.concessionType) !== 'REVISED') continue;
+    if (!entry) continue;
     const feeHeadId = resolveFeeHeadId(entry, maps) || String(entry.feeHeadId || '');
     if (!feeHeadId) continue;
 

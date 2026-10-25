@@ -41,16 +41,9 @@ const buildConcessionLookupKey = (feeHeadId, studentYear, semester) =>
 
 const resolveStudentFeeAmount = (structureAmount, entry) => {
   const standardAmount = Number(structureAmount) || 0;
-  const concessionAmount = getConcessionAmount(entry);
-  const type = normalizeConcessionType(entry?.concessionType);
-
-  if (type === 'CONCESSION') {
-    // CONCESSION: amount is the discount; reduce the demand
-    return Math.max(0, standardAmount - concessionAmount);
-  }
-
-  // REVISED: keep the structured demand intact.
-  // The difference (structure - revised) is posted as a CREDIT concession transaction.
+  // Under the declaration concession model, standard structure demand remains intact
+  // for both REVISED and CONCESSION types, and the concession is posted as a CREDIT
+  // transaction in the student ledger.
   return standardAmount;
 };
 
