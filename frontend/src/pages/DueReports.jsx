@@ -545,7 +545,7 @@ const DueReports = () => {
         // 2. Define Static Columns
         const staticHeaders = [
             "Admission No", "Pin No", "Student Name", "Course", "Branch", "Year", "Phone",
-            "Overall Total", "Overall Paid", "Overall Due"
+            "Overall Total", "Concession", "Paid", "Previous Due", "Active Due", "Overall Due"
         ];
 
         // 3. Build Header Rows (Row 1: Main Headers, Row 2: Sub Headers)
@@ -569,7 +569,10 @@ const DueReports = () => {
                 r.current_year,
                 r.student_mobile,
                 r.totalFee,
+                r.concessionAmount || 0,
                 r.paidAmount,
+                r.previousDue || 0,
+                r.activeDue || 0,
                 r.dueAmount
             ];
 
@@ -616,8 +619,8 @@ const DueReports = () => {
     const sortedData = React.useMemo(() => {
         if (!sortField) return reportData;
         return [...reportData].sort((a, b) => {
-            let valA = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount') ? (a[sortField] || 0) : (a[sortField] || '');
-            let valB = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount') ? (b[sortField] || 0) : (b[sortField] || '');
+            let valA = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount' || sortField === 'concessionAmount' || sortField === 'previousDue') ? (a[sortField] || 0) : (a[sortField] || '');
+            let valB = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount' || sortField === 'concessionAmount' || sortField === 'previousDue') ? (b[sortField] || 0) : (b[sortField] || '');
 
             if (sortField?.startsWith('year_')) {
                 const yr = Number(sortField.replace('year_', ''));
@@ -625,7 +628,7 @@ const DueReports = () => {
                 valB = b.yearDues?.[yr] || 0;
             }
 
-            if (typeof valA === 'string' && sortField !== 'totalFee' && sortField !== 'paidAmount' && sortField !== 'dueAmount' && sortField !== 'activeDue' && !sortField?.startsWith('year_')) {
+            if (typeof valA === 'string' && sortField !== 'totalFee' && sortField !== 'paidAmount' && sortField !== 'dueAmount' && sortField !== 'activeDue' && sortField !== 'concessionAmount' && sortField !== 'previousDue' && !sortField?.startsWith('year_')) {
                 return sortDir === 'asc'
                     ? String(valA).localeCompare(String(valB))
                     : String(valB).localeCompare(String(valA));
@@ -703,10 +706,28 @@ const DueReports = () => {
         if (!excludeScholarship && !hasFeeHeadFilter) {
             return sortedData.map(student => {
                 const breakdown = buildYearAndHeadBreakdown(student, false);
+                const currentSelectedYr = Number(filters.year || student.current_year || 1);
+                let prevDueCalc = student.previousDue != null ? Number(student.previousDue) : 0;
+                const sourceYearDues = student.yearDues || breakdown.yearDues || {};
+                if (student.previousDue == null && sourceYearDues) {
+                    Object.entries(sourceYearDues).forEach(([yrStr, yrDue]) => {
+                        const yrNum = Number(yrStr);
+                        if (yrNum < currentSelectedYr) {
+                            prevDueCalc += (Number(yrDue) || 0);
+                        }
+                    });
+                }
+                const previousDue = Math.max(0, prevDueCalc);
+                const activeDue = student.previousDue != null
+                    ? (student.activeDue || 0)
+                    : Math.max(0, (student.activeDue || 0) + previousDue);
+
                 return {
                     ...student,
-                    yearDues: breakdown.yearDues,
-                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown
+                    yearDues: sourceYearDues,
+                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown,
+                    previousDue,
+                    activeDue
                 };
             });
         }
@@ -902,6 +923,28 @@ const DueReports = () => {
                 });
             });
 
+            const currentSelectedYr = Number(filters.year || student.current_year || 1);
+            let prevDueCalc = 0;
+            if (breakdown.yearDues && Object.keys(breakdown.yearDues).some(y => Number(y) < currentSelectedYr)) {
+                Object.entries(breakdown.yearDues).forEach(([yrStr, yrDue]) => {
+                    const yrNum = Number(yrStr);
+                    if (yrNum < currentSelectedYr) {
+                        prevDueCalc += (Number(yrDue) || 0);
+                    }
+                });
+            } else if (student.yearDues && Object.keys(student.yearDues).some(y => Number(y) < currentSelectedYr)) {
+                Object.entries(student.yearDues).forEach(([yrStr, yrDue]) => {
+                    const yrNum = Number(yrStr);
+                    if (yrNum < currentSelectedYr) {
+                        prevDueCalc += (Number(yrDue) || 0);
+                    }
+                });
+            } else {
+                prevDueCalc = Number(student.previousDue) || 0;
+            }
+            const previousDue = Math.max(0, prevDueCalc);
+            const totalActiveDue = Math.max(0, activeDue + previousDue);
+
             const finalizeCategoryClient = (summary) => {
                 if (summary.total === 0 && summary.paid === 0 && summary.concession === 0 && summary.due === 0) {
                     return null;
@@ -939,7 +982,8 @@ const DueReports = () => {
                 paidAmount,
                 concessionAmount,
                 dueAmount,
-                activeDue,
+                previousDue,
+                activeDue: totalActiveDue,
                 termDues,
                 yearDues: breakdown.yearDues,
                 feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown,
@@ -947,7 +991,7 @@ const DueReports = () => {
                 ...(hasFeeHeadFilter ? { feeDetailsArray } : {})
             };
         });
-    }, [sortedData, excludeScholarship, selectedFeeHeadIds, feeHeads]);
+    }, [sortedData, excludeScholarship, selectedFeeHeadIds, feeHeads, filters.year]);
 
     const feeHeadFilterOptions = React.useMemo(() => (
         [...feeHeads]
@@ -1008,7 +1052,7 @@ const DueReports = () => {
     }, [reportMode, batchYearsList, filteredData]);
 
     const totalColSpan = React.useMemo(() => {
-        return reportMode === 'batch' ? (7 + batchYearsList.length) : (10 + maxTerms);
+        return reportMode === 'batch' ? (7 + batchYearsList.length) : (11 + maxTerms);
     }, [reportMode, batchYearsList.length, maxTerms]);
 
     const isAllYearsSelected = React.useMemo(() => {
@@ -1493,7 +1537,7 @@ const DueReports = () => {
                                             <tr>
                                                 <th className="p-2 w-10 text-center">#</th>
                                                 <th 
-                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition"
                                                     onClick={() => {
                                                         const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('pin_no');
@@ -1559,14 +1603,13 @@ const DueReports = () => {
                                                         Overall Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
-                                                <th className="p-2 text-center w-24">Status</th>
                                                 <th className="p-2 text-center w-16">Action</th>
                                             </tr>
                                         ) : (
                                             <tr>
                                                 <th className="p-2 w-10 text-center">#</th>
                                                 <th 
-                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition"
                                                     onClick={() => {
                                                         const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('pin_no');
@@ -1616,13 +1659,25 @@ const DueReports = () => {
                                                 <th 
                                                     className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
                                                     onClick={() => {
+                                                        const dir = (sortField === 'concessionAmount' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('concessionAmount');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Concession {sortField === 'concessionAmount' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
                                                         const dir = (sortField === 'paidAmount' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('paidAmount');
                                                         setSortDir(dir);
                                                     }}
                                                 >
                                                     <div className="flex items-center justify-end gap-1">
-                                                        Total Paid {sortField === 'paidAmount' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                        Paid {sortField === 'paidAmount' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
                                                 {/* Dynamic Term Headers */}
@@ -1634,6 +1689,18 @@ const DueReports = () => {
                                                         )}
                                                     </th>
                                                 ))}
+                                                <th 
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    onClick={() => {
+                                                        const dir = (sortField === 'previousDue' && sortDir === 'asc') ? 'desc' : 'asc';
+                                                        setSortField('previousDue');
+                                                        setSortDir(dir);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        Previous Due {sortField === 'previousDue' && (sortDir === 'asc' ? '▲' : '▼')}
+                                                    </div>
+                                                </th>
                                                 <th 
                                                     className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
                                                     onClick={() => {
@@ -1658,7 +1725,6 @@ const DueReports = () => {
                                                         Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
-                                                <th className="p-2 text-center w-24">Status</th>
                                                 <th className="p-2 text-center w-16">Action</th>
                                             </tr>
                                         )}
@@ -1671,7 +1737,7 @@ const DueReports = () => {
                                                         <div className="h-3.5 w-4 bg-slate-200 rounded mx-auto" />
                                                     </td>
                                                     <td className="p-3">
-                                                        <div className="h-3.5 w-16 bg-slate-200 rounded" />
+                                                        <div className="h-3.5 w-24 bg-slate-200 rounded" />
                                                     </td>
                                                     <td className="p-3">
                                                         <div className="h-3.5 w-20 bg-slate-200 rounded" />
@@ -1702,6 +1768,9 @@ const DueReports = () => {
                                                                 <div className="h-3.5 w-16 bg-slate-200 rounded ml-auto" />
                                                             </td>
                                                             <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-purple-100/60 rounded ml-auto" />
+                                                            </td>
+                                                            <td className="p-3 text-right">
                                                                 <div className="h-3.5 w-16 bg-emerald-100/60 rounded ml-auto" />
                                                             </td>
                                                             {Array.from({ length: maxTerms }).map((_, tIdx) => (
@@ -1710,6 +1779,9 @@ const DueReports = () => {
                                                                 </td>
                                                             ))}
                                                             <td className="p-3 text-right">
+                                                                <div className="h-3.5 w-16 bg-rose-100/60 rounded ml-auto" />
+                                                            </td>
+                                                            <td className="p-3 text-right">
                                                                 <div className="h-3.5 w-16 bg-amber-100/60 rounded ml-auto" />
                                                             </td>
                                                             <td className="p-3 text-right">
@@ -1717,9 +1789,6 @@ const DueReports = () => {
                                                             </td>
                                                         </>
                                                     )}
-                                                    <td className="p-3 text-center">
-                                                        <div className="h-4 w-14 bg-slate-200 rounded-full mx-auto" />
-                                                    </td>
                                                     <td className="p-3 text-center">
                                                         <div className="h-5 w-5 bg-slate-200 rounded-lg mx-auto" />
                                                     </td>
@@ -1752,7 +1821,7 @@ const DueReports = () => {
                                                             onClick={() => toggleRow(student.admission_number)}
                                                         >
                                                             <td className="p-2 text-center text-gray-400">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                                                            <td className="p-2 font-mono font-medium text-gray-600">{student.pin_no || '-'}</td>
+                                                            <td className="p-2 w-32 min-w-[130px] font-mono font-medium text-gray-600">{student.pin_no || '-'}</td>
                                                             <td className="p-2 font-mono text-gray-600">{student.admission_number || '-'}</td>
                                                             <td className="p-2 font-medium text-gray-900">
                                                                 <div className="flex items-center gap-1.5">
@@ -1784,6 +1853,7 @@ const DueReports = () => {
                                                             ) : (
                                                                 <>
                                                                     <td className="p-2 text-right text-gray-600">₹{(student.totalFee || 0).toLocaleString('en-IN')}</td>
+                                                                    <td className="p-2 text-right text-purple-700 font-medium">₹{(student.concessionAmount || 0).toLocaleString('en-IN')}</td>
                                                                     <td className="p-2 text-right text-green-600 font-semibold">₹{(student.paidAmount || 0).toLocaleString('en-IN')}</td>
                                                                     {/* Dynamic Term Dues */}
                                                                     {Array.from({ length: maxTerms }).map((_, i) => {
@@ -1796,15 +1866,15 @@ const DueReports = () => {
                                                                             </td>
                                                                         );
                                                                     })}
+                                                                    <td className="p-2 text-right font-medium">
+                                                                        <div className={(student.previousDue || 0) > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                            ₹{(student.previousDue || 0).toLocaleString('en-IN')}
+                                                                        </div>
+                                                                    </td>
                                                                     <td className="p-2 text-right text-amber-600 font-bold">₹{(student.activeDue || 0).toLocaleString('en-IN')}</td>
                                                                     <td className="p-2 text-right font-bold text-red-600">₹{due.toLocaleString('en-IN')}</td>
                                                                 </>
                                                             )}
-                                                            <td className="p-2 text-center">
-                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${status === 'CLEARED' ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-800'}`}>
-                                                                    {status}
-                                                                </span>
-                                                            </td>
                                                             <td className="p-2 text-center" onClick={e => e.stopPropagation()}>
                                                                 <button
                                                                     onClick={() => handlePrintIndividual(student)}

@@ -1793,10 +1793,12 @@ const getDueReports = async (req, res) => {
                 }
             }
 
+            const allSDemands = [];
             const sDemands = [];
             identifiers.forEach(id => {
                 if (studentDemandsMap[id]) {
                     studentDemandsMap[id].forEach(fee => {
+                        allSDemands.push(fee);
                         const feeYear = Number(fee.studentYear);
                         const isYearMatched = 
                             yearNumbersList && yearNumbersList.length > 0 
@@ -1817,11 +1819,21 @@ const getDueReports = async (req, res) => {
                     uniqueSDemands.push(d);
                 }
             });
+            const uniqueAllDemands = [];
+            const seenAllDemands = new Set();
+            allSDemands.forEach(d => {
+                if (!seenAllDemands.has(String(d._id))) {
+                    seenAllDemands.add(String(d._id));
+                    uniqueAllDemands.push(d);
+                }
+            });
 
+            const allSTransactions = [];
             const sTransactions = [];
             identifiers.forEach(id => {
                 if (studentTransactionsMap[id]) {
                     studentTransactionsMap[id].forEach(t => {
+                        allSTransactions.push(t);
                         const txnYear = Number(t.studentYear);
                         const isYearMatched = 
                             yearNumbersList && yearNumbersList.length > 0 
@@ -1842,8 +1854,17 @@ const getDueReports = async (req, res) => {
                     uniqueSTransactions.push(t);
                 }
             });
+            const uniqueAllTransactions = [];
+            const seenAllTxns = new Set();
+            allSTransactions.forEach(t => {
+                if (!seenAllTxns.has(String(t._id))) {
+                    seenAllTxns.add(String(t._id));
+                    uniqueAllTransactions.push(t);
+                }
+            });
 
             const groupedData = {};
+            const allYearsGroupedData = {};
 
             const getGroupKey = (headId, year, feeCode, remarks, semester) => {
                 const semKey = semester ? `S${semester}` : 'Y';
@@ -1856,22 +1877,79 @@ const getDueReports = async (req, res) => {
                 return `${headId}-${year}-${semKey}`;
             };
 
-            const resolveTxnGroupKey = (headId, year, feeCode, remarks, semester) => {
+            const resolveTxnGroupKey = (targetMap, headId, year, feeCode, remarks, semester) => {
                 const exactKey = getGroupKey(headId, year, feeCode, remarks, semester);
                 if (feeCode === 'CF' || feeCode === 'SSF' || feeCode === 'TRN' || feeCode === 'TRN01') {
                     return exactKey;
                 }
                 const yearPrefix = `${headId}-${year}-`;
-                const candidates = Object.keys(groupedData).filter(k => k.startsWith(yearPrefix));
+                const candidates = Object.keys(targetMap).filter(k => k.startsWith(yearPrefix));
                 const withDemand = candidates
-                    .map(k => ({ k, amt: Number(groupedData[k].totalAmount) || 0 }))
+                    .map(k => ({ k, amt: Number(targetMap[k].totalAmount) || 0 }))
                     .filter(x => x.amt > 0)
                     .sort((a, b) => b.amt - a.amt);
                 if (withDemand.length > 0) return withDemand[0].k;
-                if (groupedData[exactKey]) return exactKey;
+                if (targetMap[exactKey]) return exactKey;
                 return exactKey;
             };
 
+            // Populate allYearsGroupedData (across all years for accurate previousDue & yearDues)
+            uniqueAllDemands.forEach(fee => {
+                const hId = fee.feeHead ? fee.feeHead._id.toString() : 'unknown';
+                const hCode = fee.feeHead ? fee.feeHead.code : '';
+                const year = String(fee.studentYear || 1);
+                const key = getGroupKey(hId, year, hCode, fee.remarks, fee.semester);
+                if (!allYearsGroupedData[key]) {
+                    allYearsGroupedData[key] = {
+                        feeHeadId: fee.feeHead ? fee.feeHead._id : null,
+                        feeHeadName: (fee.feeHead && (fee.feeHead.code === 'CF' || fee.feeHead.code === 'SSF')) 
+                            ? (fee.remarks ? `${fee.feeHead.name} - ${fee.remarks}` : fee.feeHead.name) 
+                            : (fee.feeHead ? fee.feeHead.name : 'Unknown'),
+                        feeHeadCode: fee.feeHead ? fee.feeHead.code : '',
+                        studentYear: year,
+                        totalAmount: 0,
+                        concessionAmount: 0,
+                        paidAmount: 0,
+                        dueAmount: 0
+                    };
+                }
+                allYearsGroupedData[key].totalAmount += (fee.amount || 0);
+            });
+
+            uniqueAllTransactions.forEach(t => {
+                if (t.feeHead) {
+                    const hId = t.feeHead.toString();
+                    const year = String(t.studentYear || 1);
+                    const head = feeHeadMap[hId];
+                    const hCode = head ? head.code : '';
+                    const key = resolveTxnGroupKey(allYearsGroupedData, hId, year, hCode, t.remarks, t.semester);
+                    if (!allYearsGroupedData[key]) {
+                        allYearsGroupedData[key] = {
+                            feeHeadId: hId,
+                            feeHeadName: (head && (head.code === 'CF' || head.code === 'SSF')) 
+                                ? (t.remarks ? `${head.name} - ${t.remarks}` : head.name) 
+                                : (head ? head.name : 'Unknown'),
+                            feeHeadCode: head ? head.code : '',
+                            studentYear: year,
+                            totalAmount: 0,
+                            concessionAmount: 0,
+                            paidAmount: 0,
+                            dueAmount: 0
+                        };
+                    }
+                    if (t.transactionType === 'DEBIT') {
+                        if (t.remarks === 'Extra Demand as per declaration') {
+                            allYearsGroupedData[key].totalAmount += (t.amount || 0);
+                        } else {
+                            allYearsGroupedData[key].paidAmount += (t.amount || 0);
+                        }
+                    } else if (t.transactionType === 'CREDIT') {
+                        allYearsGroupedData[key].concessionAmount += (t.amount || 0);
+                    }
+                }
+            });
+
+            // Populate groupedData (specifically for current selected academic year)
             uniqueSDemands.forEach(fee => {
                 const hId = fee.feeHead ? fee.feeHead._id.toString() : 'unknown';
                 const hCode = fee.feeHead ? fee.feeHead.code : '';
@@ -1917,7 +1995,7 @@ const getDueReports = async (req, res) => {
                     const year = String(t.studentYear || 1);
                     const head = feeHeadMap[hId];
                     const hCode = head ? head.code : '';
-                    const key = resolveTxnGroupKey(hId, year, hCode, t.remarks, t.semester);
+                    const key = resolveTxnGroupKey(groupedData, hId, year, hCode, t.remarks, t.semester);
 
                     if (!groupedData[key]) {
                         const structKey = `${student.college}|${student.course}|${student.branch}|${student.stud_type}|${hId}-${year}-${t.semester || 'null'}`;
@@ -2155,10 +2233,11 @@ const getDueReports = async (req, res) => {
                 transport: finalizeCategory(transportSummary)
             };
             const studentYearDues = {};
-            Object.values(groupedData).forEach(item => {
+            Object.values(allYearsGroupedData).forEach(item => {
                 const yr = Number(item.studentYear || 1);
+                item.dueAmount = Math.max(0, (item.totalAmount || 0) - (item.paidAmount || 0) - (item.concessionAmount || 0));
                 if (!studentYearDues[yr]) studentYearDues[yr] = 0;
-                studentYearDues[yr] += (item.dueAmount || 0);
+                studentYearDues[yr] += item.dueAmount;
             });
             student.yearDues = studentYearDues;
 
@@ -2211,10 +2290,23 @@ const getDueReports = async (req, res) => {
 
             student.termDues = termDues;
             student.termDueDates = termDueDates;
-            student.activeDue = activeDue;
             student.concessionAmount = (academicSummary.concession || 0) + (hostelSummary.concession || 0) + (transportSummary.concession || 0);
             student.dueAmount = Math.max(0, student.totalFee - student.paidAmount - student.concessionAmount);
             student.scholarshipStatus = getScholarshipStatus(student.id, targetStudentYear || student.current_year) || 'not_eligible';
+
+            // Calculate previous due: dues from prior academic years (i.e. year < current studentYear / targetStudentYear)
+            const currentSelectedYr = Number(targetStudentYear || student.current_year || 1);
+            let prevDueCalc = 0;
+            if (student.yearDues) {
+                Object.entries(student.yearDues).forEach(([yrStr, yrDue]) => {
+                    const yrNum = Number(yrStr);
+                    if (yrNum < currentSelectedYr) {
+                        prevDueCalc += (Number(yrDue) || 0);
+                    }
+                });
+            }
+            student.previousDue = Math.max(0, prevDueCalc);
+            student.activeDue = Math.max(0, activeDue + student.previousDue);
 
             student.feeDetailsArray = Object.keys(student.feeDetails).map(fid => {
                 const detail = student.feeDetails[fid];
