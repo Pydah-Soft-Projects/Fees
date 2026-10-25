@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import Swal from 'sweetalert2';
-import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag } from 'lucide-react';
+import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag, BarChart3, ListFilter, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useReactToPrint } from 'react-to-print';
 import ConcessionReportPrint from '../components/ConcessionReportPrint';
@@ -231,7 +231,7 @@ const ConcessionManagement = () => {
                 template: 'concession-report',
                 data: {
                     reportData,
-                    filters: reportFilters
+                    filters: { ...reportFilters, viewType: reportSubTab }
                 }
             });
             printHtmlDocument(response.data);
@@ -271,6 +271,79 @@ const ConcessionManagement = () => {
     });
     const [reportData, setReportData] = useState([]);
     const [isReportLoading, setIsReportLoading] = useState(false);
+    const [reportSubTab, setReportSubTab] = useState('abstract'); // 'abstract' or 'detailed'
+    const [expandedAbstractRows, setExpandedAbstractRows] = useState({});
+    const [isAllAbstractExpanded, setIsAllAbstractExpanded] = useState(false);
+
+    // Compute Abstract Grouping (College Wise with Headwise total and expandable programmewise breakdown)
+    const abstractData = React.useMemo(() => {
+        if (!reportData || reportData.length === 0) return [];
+
+        const groups = {};
+
+        reportData.forEach(item => {
+            const college = item.college || 'Unassigned College';
+            const headName = item.feeHead?.name || (typeof item.feeHead === 'string' ? item.feeHead : 'General Concession');
+            const givenBy = item.concessionGivenBy || 'Not Specified';
+            const course = item.course || 'General';
+            const amount = Number(item.amount) || 0;
+
+            const groupKey = `${college}____${headName}____${givenBy}`;
+
+            if (!groups[groupKey]) {
+                groups[groupKey] = {
+                    key: groupKey,
+                    college,
+                    head: headName,
+                    givenBy,
+                    totalAmount: 0,
+                    programmesMap: {}
+                };
+            }
+
+            groups[groupKey].totalAmount += amount;
+
+            if (!groups[groupKey].programmesMap[course]) {
+                groups[groupKey].programmesMap[course] = {
+                    programme: course,
+                    amount: 0,
+                    count: 0
+                };
+            }
+            groups[groupKey].programmesMap[course].amount += amount;
+            groups[groupKey].programmesMap[course].count += 1;
+        });
+
+        return Object.values(groups).map(g => ({
+            ...g,
+            programmes: Object.values(g.programmesMap).sort((a, b) => b.amount - a.amount)
+        })).sort((a, b) => {
+            const collegeCompare = a.college.localeCompare(b.college);
+            if (collegeCompare !== 0) return collegeCompare;
+            return a.head.localeCompare(b.head);
+        });
+    }, [reportData]);
+
+    const toggleAbstractRow = (key) => {
+        setExpandedAbstractRows(prev => ({
+            ...prev,
+            [key]: !prev[key]
+        }));
+    };
+
+    const toggleAllAbstractRows = () => {
+        if (isAllAbstractExpanded) {
+            setExpandedAbstractRows({});
+            setIsAllAbstractExpanded(false);
+        } else {
+            const allKeys = {};
+            abstractData.forEach(item => {
+                allKeys[item.key] = true;
+            });
+            setExpandedAbstractRows(allKeys);
+            setIsAllAbstractExpanded(true);
+        }
+    };
 
     // Permission Check
     const storedUser = JSON.parse(localStorage.getItem('user')) || {};
@@ -2129,6 +2202,52 @@ const ConcessionManagement = () => {
                 {activeTab === 'reports' && (
                     <div className="p-3 sm:p-6 flex flex-col max-w-[1700px] mx-auto w-full animate-fade-in">
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full">
+                            {/* Sub-Tab Navigation Header */}
+                            <div className="p-2 sm:px-4 sm:py-2.5 border-b border-gray-200 bg-white flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl border border-gray-200 shadow-inner">
+                                    <button
+                                        type="button"
+                                        onClick={() => setReportSubTab('abstract')}
+                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            reportSubTab === 'abstract'
+                                                ? 'bg-white text-blue-700 shadow-xs border border-gray-200'
+                                                : 'text-gray-500 hover:text-gray-800'
+                                        }`}
+                                    >
+                                        <BarChart3 size={13} />
+                                        Abstract View
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setReportSubTab('detailed')}
+                                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                            reportSubTab === 'detailed'
+                                                ? 'bg-white text-blue-700 shadow-xs border border-gray-200'
+                                                : 'text-gray-500 hover:text-gray-800'
+                                        }`}
+                                    >
+                                        <ListFilter size={13} />
+                                        Detailed View
+                                    </button>
+                                </div>
+
+                                {reportSubTab === 'abstract' && abstractData.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={toggleAllAbstractRows}
+                                            className="flex items-center gap-1 text-[11px] font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg border border-gray-200 transition cursor-pointer"
+                                        >
+                                            <Layers size={13} className="text-gray-500" />
+                                            {isAllAbstractExpanded ? 'Collapse All Programmes' : 'Expand All Programmes'}
+                                        </button>
+                                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-wider bg-gray-100 px-2.5 py-1 rounded-md border border-gray-200">
+                                            {abstractData.length} Grouped Records
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Toolbar (Filters) */}
                             <div className="p-2.5 sm:p-3 border-b border-gray-100 bg-gray-50/80 flex flex-wrap items-center justify-between gap-2">
                                 <div className="flex flex-wrap items-center gap-2">
@@ -2233,111 +2352,255 @@ const ConcessionManagement = () => {
                                 </div>
                             </div>
 
-                            {/* Reports Table */}
-                            <div className="flex-1 overflow-x-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
-                                        <tr>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Voucher ID</th>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
-                                            <th className="py-2.5 px-3 min-w-[160px]">Student Information</th>
-                                            <th className="py-2.5 px-3 whitespace-nowrap w-[130px]">Fee Component</th>
-                                            <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Given By</th>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Approved By</th>
-                                            <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-100 text-xs">
-                                        {isReportLoading ? (
+                            {/* ABSTRACT VIEW */}
+                            {reportSubTab === 'abstract' && (
+                                <div className="flex-1 overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
                                             <tr>
-                                                <td colSpan="8" className="py-40 text-center">
-                                                    <div className="flex flex-col items-center justify-center gap-4">
-                                                        <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                                                        <p className="text-xs font-extrabold text-blue-600 uppercase tracking-widest animate-pulse">Syncing Audit Logs...</p>
-                                                    </div>
-                                                </td>
+                                                <th className="py-2.5 px-3 text-center w-12 whitespace-nowrap">S.no</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">College Wise</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">programme wise</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Head</th>
+                                                <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Concession Given by</th>
                                             </tr>
-                                        ) : reportData.length === 0 ? (
-                                            <tr>
-                                                <td colSpan="8" className="py-40 text-center">
-                                                    <div className="flex flex-col items-center justify-center opacity-40">
-                                                        <div className="bg-gray-100 p-6 rounded-full border border-dashed border-gray-300 mb-4">
-                                                            <Search size={40} className="text-gray-400" />
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-100 text-xs">
+                                            {isReportLoading ? (
+                                                <tr>
+                                                    <td colSpan="6" className="py-36 text-center">
+                                                        <div className="flex flex-col items-center justify-center gap-3">
+                                                            <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                                            <p className="text-xs font-extrabold text-blue-600 uppercase tracking-widest animate-pulse">Syncing Abstract Summary...</p>
                                                         </div>
-                                                        <h4 className="text-xl font-bold text-gray-800">No report data found</h4>
-                                                        <p className="text-sm text-gray-500 mt-1">Adjust your date range or filters above.</p>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ) : (
-                                            reportData.map(req => (
-                                                <tr key={req._id} className="hover:bg-gray-50/80 transition-all duration-200">
-                                                    <td className="py-2.5 px-3 whitespace-nowrap">
-                                                        <span className="font-mono text-[9.5px] font-black bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-gray-800">
-                                                            #{req.voucherId || '---'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-bold text-gray-500">
-                                                        {new Date(req.createdAt).toLocaleDateString()}
-                                                    </td>
-                                                    <td className="py-2.5 px-3">
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold text-gray-800">{req.studentName}</span>
-                                                            <span className="text-[9.5px] text-gray-400 font-bold uppercase">{req.studentPin || req.studentId}</span>
-                                                            <div className="flex items-center gap-1.5 mt-0.5">
-                                                                <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-tight">{req.college || 'N/A'}</span>
-                                                                <span className="text-gray-300 text-[10px]">·</span>
-                                                                <span className="text-[10px] text-gray-500 font-medium">{req.course} {req.branch ? `(${req.branch})` : ''}</span>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap max-w-[130px]">
-                                                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-tight truncate inline-block max-w-full">
-                                                            {req.feeHead?.name || (typeof req.feeHead === 'string' ? req.feeHead : 'Concession')}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap text-right">
-                                                        <span className="text-xs font-black text-gray-900">₹{req.amount.toLocaleString('en-IN')}</span>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap">
-                                                        <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
-                                                            {req.concessionGivenBy || '—'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap">
-                                                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
-                                                            {req.approvedBy || (req.status === 'APPROVED' ? 'Approved' : 'Pending')}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-2.5 px-3 whitespace-nowrap text-center">
-                                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-                                                            req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                            req.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
-                                                            'bg-amber-50 text-amber-700 border-amber-200'
-                                                        }`}>
-                                                            {req.status}
-                                                        </span>
                                                     </td>
                                                 </tr>
-                                            ))
+                                            ) : abstractData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="6" className="py-36 text-center">
+                                                        <div className="flex flex-col items-center justify-center opacity-40">
+                                                            <div className="bg-gray-100 p-6 rounded-full border border-dashed border-gray-300 mb-3">
+                                                                <BarChart3 size={36} className="text-gray-400" />
+                                                            </div>
+                                                            <h4 className="text-lg font-bold text-gray-800">No abstract records found</h4>
+                                                            <p className="text-xs text-gray-500 mt-1">Adjust your filters or date range above.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                abstractData.map((group, index) => {
+                                                    const isExpanded = !!expandedAbstractRows[group.key];
+                                                    const hasMultipleProgrammes = group.programmes.length > 1;
+
+                                                    return (
+                                                        <React.Fragment key={group.key}>
+                                                            {/* Main Headwise Row */}
+                                                            <tr className={`hover:bg-blue-50/40 transition-colors ${isExpanded ? 'bg-blue-50/25' : ''}`}>
+                                                                <td className="py-2.5 px-3 text-center text-xs font-bold text-gray-500">
+                                                                    {index + 1}.
+                                                                </td>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <span className="font-bold text-gray-900 text-xs">
+                                                                        {group.college}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    {hasMultipleProgrammes ? (
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => toggleAbstractRow(group.key)}
+                                                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition cursor-pointer shadow-2xs"
+                                                                            title="Click to toggle programme breakdown"
+                                                                        >
+                                                                            {isExpanded ? <ChevronDown size={12} strokeWidth={2.5} /> : <ChevronRight size={12} strokeWidth={2.5} />}
+                                                                            <span>{isExpanded ? 'Hide Programmes' : `View Programmes (${group.programmes.length})`}</span>
+                                                                        </button>
+                                                                    ) : (
+                                                                        <span className="font-semibold text-gray-800 text-xs">
+                                                                            {group.programmes[0]?.programme || '—'}
+                                                                        </span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-tight">
+                                                                        {group.head}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap text-right">
+                                                                    <span className="text-xs font-black text-gray-900">
+                                                                        ₹{group.totalAmount.toLocaleString('en-IN')}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                                    <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
+                                                                        {group.givenBy}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+
+                                                            {/* Expanded Programme Breakdown Sub-Rows */}
+                                                            {isExpanded && group.programmes.map((prog, pIdx) => (
+                                                                <tr key={`${group.key}_prog_${pIdx}`} className="bg-slate-50/70 border-t border-dashed border-gray-200">
+                                                                    <td className="py-2 px-3 text-center text-[10px] text-gray-400 font-mono">
+                                                                        {index + 1}.{pIdx + 1}
+                                                                    </td>
+                                                                    <td className="py-2 px-3 pl-8 text-[11px] text-gray-400 font-medium">
+                                                                        <span className="text-gray-300 mr-1.5">↳</span> {group.college}
+                                                                    </td>
+                                                                    <td className="py-2 px-3 pl-6">
+                                                                        <div className="inline-flex items-center gap-1.5">
+                                                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                                                            <span className="font-bold text-blue-800 text-xs">{prog.programme}</span>
+                                                                            <span className="text-[9.5px] text-gray-400 font-medium font-mono">
+                                                                                ({prog.count} {prog.count === 1 ? 'student' : 'students'})
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="py-2 px-3 text-[10.5px] text-gray-500 italic">
+                                                                        {group.head}
+                                                                    </td>
+                                                                    <td className="py-2 px-3 text-right">
+                                                                        <span className="text-xs font-bold text-gray-700">
+                                                                            ₹{prog.amount.toLocaleString('en-IN')}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="py-2 px-3 text-[10.5px] text-gray-500">
+                                                                        {group.givenBy}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </React.Fragment>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                        {!isReportLoading && abstractData.length > 0 && (
+                                            <tfoot className="bg-gray-50/70 border-t-2 border-gray-200 text-xs">
+                                                <tr>
+                                                    <td colSpan="4" className="py-3 px-3 text-right font-black text-gray-500 text-[9.5px] uppercase tracking-widest">
+                                                        Grand Aggregate Totals
+                                                    </td>
+                                                    <td className="py-3 px-3 text-right">
+                                                        <span className="text-xs font-black text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 shadow-xs">
+                                                            ₹{abstractData.reduce((sum, item) => sum + item.totalAmount, 0).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-3 px-3"></td>
+                                                </tr>
+                                            </tfoot>
                                         )}
-                                    </tbody>
-                                    {!isReportLoading && reportData.length > 0 && (
-                                        <tfoot className="bg-gray-50/50 border-t-2 border-gray-200 text-xs">
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* DETAILED AUDIT VIEW */}
+                            {reportSubTab === 'detailed' && (
+                                <div className="flex-1 overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
                                             <tr>
-                                                <td colSpan="4" className="py-3 px-3 text-right font-black text-gray-500 text-[9.5px] uppercase tracking-widest">Grand Aggregate Totals</td>
-                                                <td className="py-3 px-3 text-right">
-                                                    <span className="text-xs font-black text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 shadow-xs">
-                                                        ₹{reportData.reduce((sum, item) => sum + item.amount, 0).toLocaleString('en-IN')}
-                                                    </span>
-                                                </td>
-                                                <td colSpan="3" className="py-3 px-3"></td>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Voucher ID</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Date</th>
+                                                <th className="py-2.5 px-3 min-w-[160px]">Student Information</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap w-[130px]">Fee Component</th>
+                                                <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Given By</th>
+                                                <th className="py-2.5 px-3 whitespace-nowrap">Approved By</th>
+                                                <th className="py-2.5 px-3 text-center whitespace-nowrap">Status</th>
                                             </tr>
-                                        </tfoot>
-                                    )}
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-100 text-xs">
+                                            {isReportLoading ? (
+                                                <tr>
+                                                    <td colSpan="8" className="py-40 text-center">
+                                                        <div className="flex flex-col items-center justify-center gap-4">
+                                                            <div className="w-10 h-10 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                                                            <p className="text-xs font-extrabold text-blue-600 uppercase tracking-widest animate-pulse">Syncing Audit Logs...</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : reportData.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="8" className="py-40 text-center">
+                                                        <div className="flex flex-col items-center justify-center opacity-40">
+                                                            <div className="bg-gray-100 p-6 rounded-full border border-dashed border-gray-300 mb-4">
+                                                                <Search size={40} className="text-gray-400" />
+                                                            </div>
+                                                            <h4 className="text-xl font-bold text-gray-800">No report data found</h4>
+                                                            <p className="text-sm text-gray-500 mt-1">Adjust your date range or filters above.</p>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                reportData.map(req => (
+                                                    <tr key={req._id} className="hover:bg-gray-50/80 transition-all duration-200">
+                                                        <td className="py-2.5 px-3 whitespace-nowrap">
+                                                            <span className="font-mono text-[9.5px] font-black bg-gray-100 px-2 py-0.5 rounded border border-gray-200 text-gray-800">
+                                                                #{req.voucherId || '---'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap text-[11px] font-bold text-gray-500">
+                                                            {new Date(req.createdAt).toLocaleDateString()}
+                                                        </td>
+                                                        <td className="py-2.5 px-3">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-gray-800">{req.studentName}</span>
+                                                                <span className="text-[9.5px] text-gray-400 font-bold uppercase">{req.studentPin || req.studentId}</span>
+                                                                <div className="flex items-center gap-1.5 mt-0.5">
+                                                                    <span className="text-[9px] font-extrabold text-blue-600 uppercase tracking-tight">{req.college || 'N/A'}</span>
+                                                                    <span className="text-gray-300 text-[10px]">·</span>
+                                                                    <span className="text-[10px] text-gray-500 font-medium">{req.course} {req.branch ? `(${req.branch})` : ''}</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap max-w-[130px]">
+                                                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 uppercase tracking-tight truncate inline-block max-w-full">
+                                                                {req.feeHead?.name || (typeof req.feeHead === 'string' ? req.feeHead : 'Concession')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap text-right">
+                                                            <span className="text-xs font-black text-gray-900">₹{req.amount.toLocaleString('en-IN')}</span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap">
+                                                            <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
+                                                                {req.concessionGivenBy || '—'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap">
+                                                            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 inline-block">
+                                                                {req.approvedBy || (req.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-2.5 px-3 whitespace-nowrap text-center">
+                                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+                                                                req.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                                req.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' :
+                                                                'bg-amber-50 text-amber-700 border-amber-200'
+                                                            }`}>
+                                                                {req.status}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                        {!isReportLoading && reportData.length > 0 && (
+                                            <tfoot className="bg-gray-50/50 border-t-2 border-gray-200 text-xs">
+                                                <tr>
+                                                    <td colSpan="4" className="py-3 px-3 text-right font-black text-gray-500 text-[9.5px] uppercase tracking-widest">Grand Aggregate Totals</td>
+                                                    <td className="py-3 px-3 text-right">
+                                                        <span className="text-xs font-black text-blue-900 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100 shadow-xs">
+                                                            ₹{reportData.reduce((sum, item) => sum + item.amount, 0).toLocaleString('en-IN')}
+                                                        </span>
+                                                    </td>
+                                                    <td colSpan="3" className="py-3 px-3"></td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
