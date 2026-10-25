@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import api from '../lib/api';
 import { Filter, Download, ArrowRight, DollarSign, Search, ChevronLeft, ChevronRight, FileText, Printer, X, Users, BookOpen, Percent, Wallet, AlertCircle, Clock } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { useCampuses, getCollegeNamesForCampuses } from '../hooks/useCampuses';
 import { printHtmlDocument } from '../utils/printService';
 
@@ -506,113 +506,421 @@ const DueReports = () => {
     };
 
     const exportToExcel = () => {
-        if (!filteredData || filteredData.length === 0) return;
-
-        if (reportMode === 'batch') {
-            const staticHeaders = [
-                "Admission No", "Pin No", "Student Name", "Course", "Branch", "Batch", "Phone",
-                ...batchYearsList.map(y => `Year ${y} Due`),
-                "Overall Due"
-            ];
-            const dataRows = filteredData.map(r => [
-                r.admission_number,
-                r.pin_no,
-                r.student_name,
-                r.course,
-                r.branch,
-                r.batch,
-                r.student_mobile,
-                ...batchYearsList.map(y => r.yearDues?.[y] || 0),
-                r.dueAmount || 0
-            ]);
-            const wsData = [staticHeaders, ...dataRows];
-            const ws = XLSX.utils.aoa_to_sheet(wsData);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "BatchDueReport");
-            XLSX.writeFile(wb, `BatchDueReport_${filters.college || 'College'}_${filters.batch || 'Batch'}.xlsx`);
+        if (!filteredData || filteredData.length === 0) {
+            alert('No data to export.');
             return;
         }
 
-        // 1. Identify all Unique Fee Heads dynamically
-        const allFeeHeads = new Set();
-        filteredData.forEach(r => {
-            if (r.feeDetailsArray) {
-                r.feeDetailsArray.forEach(d => allFeeHeads.add(d.headName));
-            }
-        });
-        const feeHeadsList = Array.from(allFeeHeads).sort();
+        const isBatch = reportMode === 'batch';
+        const collegeName = (filters.college || 'PYDAH EDUCATIONAL INSTITUTIONS').toUpperCase();
+        const reportTitle = isBatch
+            ? `BATCH-WISE DUE REPORT (${filters.batch ? `BATCH: ${filters.batch}` : 'ALL BATCHES'})`
+            : `STUDENT FEE DUE REPORT (${filters.batch || currentAcademicYear ? `ACADEMIC YEAR: ${filters.batch || currentAcademicYear}` : 'ALL ACADEMIC YEARS'})`;
 
-        // 2. Define Static Columns
-        const staticHeaders = [
-            "Admission No", "Pin No", "Student Name", "Course", "Branch", "Year", "Phone",
-            "Overall Total", "Concession", "Paid", "Previous Due", "Active Due", "Overall Due"
-        ];
+        const filterSummaryParts = [
+            filters.course ? `Course: ${filters.course}` : 'Course: All',
+            filters.branch?.length ? `Branch: ${Array.isArray(filters.branch) ? filters.branch.join(', ') : filters.branch}` : 'Branch: All',
+            filters.year ? `Year: ${filters.year}` : (!isBatch ? 'Year: All' : null),
+            filters.quota?.length ? `Quota: ${Array.isArray(filters.quota) ? filters.quota.join(', ') : filters.quota}` : null,
+            selectedFeeHeadIds.length > 0 ? `Fee Head: Filtered (${selectedFeeHeadIds.length})` : null,
+            excludeScholarship ? 'Mode: Without Sch' : 'Mode: With Sch',
+            `Students: ${filteredData.length}`
+        ].filter(Boolean);
+        const filterSubtitle = filterSummaryParts.join('  |  ');
 
-        // 3. Build Header Rows (Row 1: Main Headers, Row 2: Sub Headers)
-        const headerRow1 = [...staticHeaders];
-        const headerRow2 = staticHeaders.map(() => ""); // Placeholders for static columns
+        const timestampStr = `Generated on: ${new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })}${searchTerm ? `  |  Search: "${searchTerm}"` : ''}`;
 
-        // Appending Fee Head Headers
-        feeHeadsList.forEach(head => {
-            headerRow1.push(head, "", ""); // Push head name and 2 empty slots for merge
-            headerRow2.push("Total", "Paid", "Due");
-        });
-
-        // 4. Build Data Rows
-        const dataRows = filteredData.map(r => {
-            const row = [
-                r.admission_number,
-                r.pin_no,
-                r.student_name,
-                r.course,
-                r.branch,
-                r.current_year,
-                r.student_mobile,
-                r.totalFee,
-                r.concessionAmount || 0,
-                r.paidAmount,
-                r.previousDue || 0,
-                r.activeDue || 0,
-                r.dueAmount
+        // Table Headers replicating main table
+        let tableHeaders = [];
+        if (isBatch) {
+            tableHeaders = [
+                "#",
+                "Pin No",
+                "Adm No",
+                "Student Name",
+                "Course / Branch",
+                ...batchYearsList.map(y => `Year ${y} Due`),
+                "Overall Due"
             ];
-
-            // Fill dynamic columns matching the sorted feeHeadsList
-            feeHeadsList.forEach(head => {
-                const detail = r.feeDetailsArray?.find(d => d.headName === head);
-                if (detail) {
-                    row.push(detail.total || 0, detail.paid || 0, detail.due || 0);
-                } else {
-                    row.push(0, 0, 0); // No record for this fee head
-                }
-            });
-            return row;
-        });
-
-        // 5. Construct Worksheet Data
-        const wsData = [headerRow1, headerRow2, ...dataRows];
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-        // 6. Apply Cell Merges
-        const merges = [];
-
-        // Vertical merges for static columns (spanning Row 0 and Row 1)
-        for (let i = 0; i < staticHeaders.length; i++) {
-            merges.push({ s: { r: 0, c: i }, e: { r: 1, c: i } });
+        } else {
+            tableHeaders = [
+                "#",
+                "Pin No",
+                "Adm No",
+                "Student Name",
+                "Course / Branch",
+                "Total Fee",
+                "Concession",
+                "Paid",
+                ...Array.from({ length: maxTerms }).map((_, i) => (
+                    termHeaderDates[i] ? `T${i + 1} Due (${termHeaderDates[i]})` : `T${i + 1} Due`
+                )),
+                "Previous Due",
+                "Active Due",
+                "Due"
+            ];
         }
 
-        // Horizontal merges for Fee Head groupings (Row 0)
-        let colIdx = staticHeaders.length;
-        feeHeadsList.forEach(() => {
-            merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: colIdx + 2 } });
-            colIdx += 3;
-        });
+        const totalCols = tableHeaders.length;
 
+        // Data Rows
+        const dataRows = [];
+        if (isBatch) {
+            filteredData.forEach((st, idx) => {
+                const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
+                const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
+                const row = [
+                    idx + 1,
+                    st.pin_no || '—',
+                    st.admission_number || '—',
+                    nameWithSch,
+                    courseBranch,
+                    ...batchYearsList.map(y => Number(st.yearDues?.[y] || 0)),
+                    Number(st.dueAmount || 0)
+                ];
+                dataRows.push(row);
+            });
+        } else {
+            filteredData.forEach((st, idx) => {
+                const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
+                const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
+                const termVals = [];
+                for (let i = 0; i < maxTerms; i++) {
+                    termVals.push(Number(st.termDues?.[i] || 0));
+                }
+                const row = [
+                    idx + 1,
+                    st.pin_no || '—',
+                    st.admission_number || '—',
+                    nameWithSch,
+                    courseBranch,
+                    Number(st.totalFee || 0),
+                    Number(st.concessionAmount || 0),
+                    Number(st.paidAmount || 0),
+                    ...termVals,
+                    Number(st.previousDue || 0),
+                    Number(st.activeDue || 0),
+                    Number(st.dueAmount || 0)
+                ];
+                dataRows.push(row);
+            });
+        }
+
+        // Summary / Total Row
+        let totalRow = [];
+        if (isBatch) {
+            const sumBatchYears = {};
+            batchYearsList.forEach(y => { sumBatchYears[y] = 0; });
+            let sumOverallDue = 0;
+            filteredData.forEach(st => {
+                batchYearsList.forEach(y => {
+                    sumBatchYears[y] += Number(st.yearDues?.[y] || 0);
+                });
+                sumOverallDue += Number(st.dueAmount || 0);
+            });
+            totalRow = [
+                "TOTAL", "", "", "", "",
+                ...batchYearsList.map(y => sumBatchYears[y]),
+                sumOverallDue
+            ];
+        } else {
+            let sumTotalFee = 0;
+            let sumConcession = 0;
+            let sumPaid = 0;
+            const sumTerms = Array(maxTerms).fill(0);
+            let sumPreviousDue = 0;
+            let sumActiveDue = 0;
+            let sumDue = 0;
+
+            filteredData.forEach(st => {
+                sumTotalFee += Number(st.totalFee || 0);
+                sumConcession += Number(st.concessionAmount || 0);
+                sumPaid += Number(st.paidAmount || 0);
+                for (let i = 0; i < maxTerms; i++) {
+                    sumTerms[i] += Number(st.termDues?.[i] || 0);
+                }
+                sumPreviousDue += Number(st.previousDue || 0);
+                sumActiveDue += Number(st.activeDue || 0);
+                sumDue += Number(st.dueAmount || 0);
+            });
+
+            totalRow = [
+                "TOTAL", "", "", "", "",
+                sumTotalFee,
+                sumConcession,
+                sumPaid,
+                ...sumTerms,
+                sumPreviousDue,
+                sumActiveDue,
+                sumDue
+            ];
+        }
+
+        // Construct Worksheet Data
+        const aoa = [
+            [collegeName],
+            [reportTitle],
+            [filterSubtitle],
+            [timestampStr],
+            tableHeaders,
+            ...dataRows,
+            totalRow,
+            [],
+            ["* This is a system-generated student fee due report for internal records only."]
+        ];
+
+        const totalRowIdx = 5 + dataRows.length;
+        const footerRowIdx = aoa.length - 1;
+
+        // Merges for header titles, total row, and footer
+        const merges = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: totalCols - 1 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
+            { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } },
+            { s: { r: 3, c: 0 }, e: { r: 3, c: totalCols - 1 } },
+            { s: { r: totalRowIdx, c: 0 }, e: { r: totalRowIdx, c: 4 } },
+            { s: { r: footerRowIdx, c: 0 }, e: { r: footerRowIdx, c: totalCols - 1 } }
+        ];
+
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
         ws['!merges'] = merges;
 
-        // 7. Write File
+        // Column widths
+        if (isBatch) {
+            ws['!cols'] = [
+                { wch: 6 },  // #
+                { wch: 15 }, // Pin No
+                { wch: 15 }, // Adm No
+                { wch: 28 }, // Student Name
+                { wch: 22 }, // Course / Branch
+                ...batchYearsList.map(() => ({ wch: 16 })), // Year X Due
+                { wch: 16 }  // Overall Due
+            ];
+        } else {
+            ws['!cols'] = [
+                { wch: 6 },  // #
+                { wch: 15 }, // Pin No
+                { wch: 15 }, // Adm No
+                { wch: 28 }, // Student Name
+                { wch: 22 }, // Course / Branch
+                { wch: 14 }, // Total Fee
+                { wch: 13 }, // Concession
+                { wch: 13 }, // Paid
+                ...Array.from({ length: maxTerms }).map(() => ({ wch: 16 })), // Dynamic Terms
+                { wch: 14 }, // Previous Due
+                { wch: 14 }, // Active Due
+                { wch: 14 }  // Due
+            ];
+        }
+
+        // Row heights
+        ws['!rows'] = [
+            { hpt: 30 }, // Row 0
+            { hpt: 24 }, // Row 1
+            { hpt: 20 }, // Row 2
+            { hpt: 18 }, // Row 3
+            { hpt: 26 }, // Row 4 (Table Header)
+            ...dataRows.map(() => ({ hpt: 20 })),
+            { hpt: 24 }, // Total Row
+            { hpt: 12 }, // Spacing
+            { hpt: 18 }  // Footer Note
+        ];
+
+        const borderThin = {
+            top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            bottom: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+        };
+
+        const borderTotal = {
+            top: { style: 'medium', color: { rgb: '0F172A' } },
+            bottom: { style: 'double', color: { rgb: '0F172A' } },
+            left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+            right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+        };
+
+        // Style Row 0: College Name (Navy Blue, White bold text)
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: 0, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill: { fgColor: { rgb: '1E3A8A' } },
+                font: { name: 'Arial', sz: 14, bold: true, color: { rgb: 'FFFFFF' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+
+        // Style Row 1: Subtitle Report Title (Royal Blue, White bold text)
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: 1, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill: { fgColor: { rgb: '2563EB' } },
+                font: { name: 'Arial', sz: 11, bold: true, color: { rgb: 'FFFFFF' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+
+        // Style Row 2: Filter Summary (Ice Blue, Slate text)
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: 2, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill: { fgColor: { rgb: 'EFF6FF' } },
+                font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '1E293B' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+
+        // Style Row 3: Timestamp & Search
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: 3, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                fill: { fgColor: { rgb: 'F8FAFC' } },
+                font: { name: 'Arial', sz: 8.5, italic: true, color: { rgb: '64748B' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+
+        // Style Row 4: Table Headers (Dark Slate, White text)
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: 4, c });
+            if (ws[ref]) {
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: '0F172A' } },
+                    font: { name: 'Arial', sz: 10, bold: true, color: { rgb: 'FFFFFF' } },
+                    alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+                    border: {
+                        top: { style: 'medium', color: { rgb: '0F172A' } },
+                        bottom: { style: 'medium', color: { rgb: '0F172A' } },
+                        left: { style: 'thin', color: { rgb: '334155' } },
+                        right: { style: 'thin', color: { rgb: '334155' } }
+                    }
+                };
+            }
+        }
+
+        // Style Data Rows
+        dataRows.forEach((row, sIdx) => {
+            const rIdx = 5 + sIdx;
+            const bgRgb = sIdx % 2 === 0 ? 'FFFFFF' : 'F8FAFC';
+
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: rIdx, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+
+                const rawVal = row[c];
+                const isNum = typeof rawVal === 'number';
+
+                let alignH = 'center';
+                let isBold = false;
+                let fontColor = '334155';
+                let cellBg = bgRgb;
+
+                if (c === 0) {
+                    alignH = 'center';
+                    isBold = true;
+                    fontColor = '64748B';
+                } else if (c === 1 || c === 2) {
+                    alignH = 'center';
+                    fontColor = '475569';
+                } else if (c === 3) {
+                    alignH = 'left';
+                    isBold = true;
+                    fontColor = '0F172A';
+                } else if (c === 4) {
+                    alignH = 'left';
+                    fontColor = '475569';
+                } else if (!isBatch) {
+                    alignH = 'right';
+                    if (c === 5) {
+                        fontColor = '334155';
+                    } else if (c === 6) {
+                        fontColor = Number(rawVal) > 0 ? '7E22CE' : '94A3B8';
+                        isBold = Number(rawVal) > 0;
+                    } else if (c === 7) {
+                        fontColor = Number(rawVal) > 0 ? '16A34A' : '94A3B8';
+                        isBold = Number(rawVal) > 0;
+                    } else if (c >= 8 && c < 8 + maxTerms) {
+                        cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
+                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
+                        isBold = Number(rawVal) > 0;
+                    } else if (c === 8 + maxTerms) {
+                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
+                        isBold = Number(rawVal) > 0;
+                    } else if (c === 9 + maxTerms) {
+                        fontColor = Number(rawVal) > 0 ? 'D97706' : '94A3B8';
+                        isBold = true;
+                    } else if (c === 10 + maxTerms) {
+                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '16A34A';
+                        isBold = true;
+                    }
+                } else {
+                    alignH = 'right';
+                    if (c >= 5 && c < 5 + batchYearsList.length) {
+                        cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
+                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
+                        isBold = Number(rawVal) > 0;
+                    } else {
+                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '16A34A';
+                        isBold = true;
+                    }
+                }
+
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: cellBg } },
+                    font: { name: 'Arial', sz: 9.5, bold: isBold, color: { rgb: fontColor } },
+                    alignment: { horizontal: alignH, vertical: 'center' },
+                    border: borderThin,
+                    ...(isNum ? { numFmt: '#,##0' } : {})
+                };
+                if (isNum) {
+                    ws[ref].z = '#,##0';
+                }
+            }
+        });
+
+        // Style Total Row
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: totalRowIdx, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+
+            const isNum = typeof totalRow[c] === 'number';
+            const alignH = c === 0 ? 'center' : (isNum ? 'right' : 'center');
+
+            ws[ref].s = {
+                fill: { fgColor: { rgb: 'F1F5F9' } },
+                font: { name: 'Arial', sz: 10, bold: true, color: { rgb: '0F172A' } },
+                alignment: { horizontal: alignH, vertical: 'center' },
+                border: borderTotal,
+                ...(isNum ? { numFmt: '#,##0' } : {})
+            };
+            if (isNum) {
+                ws[ref].z = '#,##0';
+            }
+        }
+
+        // Style Footer Note
+        for (let c = 0; c < totalCols; c++) {
+            const ref = XLSX.utils.encode_cell({ r: footerRowIdx, c });
+            if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+            ws[ref].s = {
+                font: { name: 'Arial', sz: 8.5, italic: true, color: { rgb: '94A3B8' } },
+                alignment: { horizontal: 'center', vertical: 'center' }
+            };
+        }
+
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DueReport");
-        XLSX.writeFile(wb, `DueReport_${filters.college || 'Search'}_${filters.batch || 'All'}.xlsx`);
+
+        const fileCollege = (filters.college || 'College').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const fileBatch = (filters.batch || currentAcademicYear || 'All').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const fileMode = isBatch ? 'Batch' : 'AcademicYear';
+        const fileName = `Due_Report_${fileCollege}_${fileMode}_${fileBatch}.xlsx`;
+
+        XLSX.writeFile(wb, fileName);
     };
 
     // Sorting logic
