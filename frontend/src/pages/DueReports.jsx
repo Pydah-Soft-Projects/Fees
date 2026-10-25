@@ -158,7 +158,7 @@ const DueReports = () => {
         year: '',
         studentStatus: ['Regular']
     });
-    const [sortField, setSortField] = useState('');
+    const [sortField, setSortField] = useState('pin_no');
     const [sortDir, setSortDir] = useState('asc');
     
     const [courseYears, setCourseYears] = useState({});
@@ -925,23 +925,37 @@ const DueReports = () => {
 
     // Sorting logic
     const sortedData = React.useMemo(() => {
-        if (!sortField) return reportData;
-        return [...reportData].sort((a, b) => {
-            let valA = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount' || sortField === 'concessionAmount' || sortField === 'previousDue') ? (a[sortField] || 0) : (a[sortField] || '');
-            let valB = (sortField === 'dueAmount' || sortField === 'activeDue' || sortField === 'totalFee' || sortField === 'paidAmount' || sortField === 'concessionAmount' || sortField === 'previousDue') ? (b[sortField] || 0) : (b[sortField] || '');
+        const activeSortField = sortField || 'pin_no';
+        const activeSortDir = sortDir || 'asc';
 
-            if (sortField?.startsWith('year_')) {
-                const yr = Number(sortField.replace('year_', ''));
+        return [...reportData].sort((a, b) => {
+            if (activeSortField === 'pin_no') {
+                const pinA = String(a.pin_no || '').trim();
+                const pinB = String(b.pin_no || '').trim();
+                if (!pinA && pinB) return 1;
+                if (pinA && !pinB) return -1;
+                if (!pinA && !pinB) {
+                    return String(a.admission_number || '').localeCompare(String(b.admission_number || ''), undefined, { numeric: true, sensitivity: 'base' });
+                }
+                const cmp = pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
+                return activeSortDir === 'asc' ? cmp : -cmp;
+            }
+
+            let valA = (activeSortField === 'dueAmount' || activeSortField === 'activeDue' || activeSortField === 'totalFee' || activeSortField === 'paidAmount' || activeSortField === 'concessionAmount' || activeSortField === 'previousDue') ? (a[activeSortField] || 0) : (a[activeSortField] || '');
+            let valB = (activeSortField === 'dueAmount' || activeSortField === 'activeDue' || activeSortField === 'totalFee' || activeSortField === 'paidAmount' || activeSortField === 'concessionAmount' || activeSortField === 'previousDue') ? (b[activeSortField] || 0) : (b[activeSortField] || '');
+
+            if (activeSortField?.startsWith('year_')) {
+                const yr = Number(activeSortField.replace('year_', ''));
                 valA = a.yearDues?.[yr] || 0;
                 valB = b.yearDues?.[yr] || 0;
             }
 
-            if (typeof valA === 'string' && sortField !== 'totalFee' && sortField !== 'paidAmount' && sortField !== 'dueAmount' && sortField !== 'activeDue' && sortField !== 'concessionAmount' && sortField !== 'previousDue' && !sortField?.startsWith('year_')) {
-                return sortDir === 'asc'
-                    ? String(valA).localeCompare(String(valB))
-                    : String(valB).localeCompare(String(valA));
+            if (typeof valA === 'string' && activeSortField !== 'totalFee' && activeSortField !== 'paidAmount' && activeSortField !== 'dueAmount' && activeSortField !== 'activeDue' && activeSortField !== 'concessionAmount' && activeSortField !== 'previousDue' && !activeSortField?.startsWith('year_')) {
+                return activeSortDir === 'asc'
+                    ? String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' })
+                    : String(valB).localeCompare(String(valA), undefined, { numeric: true, sensitivity: 'base' });
             }
-            return sortDir === 'asc'
+            return activeSortDir === 'asc'
                 ? (Number(valA) > Number(valB) ? 1 : -1)
                 : (Number(valB) > Number(valA) ? 1 : -1);
         });

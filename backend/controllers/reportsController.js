@@ -1493,6 +1493,8 @@ const getDueReports = async (req, res) => {
             params.push(searchPattern, searchPattern, searchPattern);
         }
 
+        sqlQuery += ` ORDER BY CASE WHEN pin_no IS NULL OR TRIM(pin_no) = '' THEN 1 ELSE 0 END, pin_no ASC, admission_number ASC`;
+
         const [students] = await db.query(sqlQuery, params);
 
         if (!students || students.length === 0) {
@@ -2326,6 +2328,17 @@ const getDueReports = async (req, res) => {
             });
 
             return student;
+        });
+
+        reportData.sort((a, b) => {
+            const pinA = String(a.pin_no || '').trim();
+            const pinB = String(b.pin_no || '').trim();
+            if (!pinA && pinB) return 1;
+            if (pinA && !pinB) return -1;
+            if (!pinA && !pinB) {
+                return String(a.admission_number || '').localeCompare(String(b.admission_number || ''), undefined, { numeric: true, sensitivity: 'base' });
+            }
+            return pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
         });
 
         res.json(reportData);
