@@ -57,6 +57,7 @@ const UserManagement = () => {
         { name: 'Dashboard', path: '/dashboard' },
         { name: 'Students', path: '/students' },
         { name: 'Fee Collection', path: '/fee-collection' },
+        { name: 'Transaction Date Changes', path: '/transaction-dates' },
         { name: 'Concessions (Declaration)', path: '/overall-concessions' },
         { name: 'Concessions (Application)', path: '/concessions' },
         { name: 'Bulk Fee Upload', path: '/bulk-fee-upload' },
@@ -72,6 +73,21 @@ const UserManagement = () => {
         { name: 'User Management', path: '/user-management' },
         { name: 'Permissions', path: '/permissions' }
     ];
+
+    const FEE_COLLECTION_SUBS = [
+        'fee_collection_pay',
+        'fee_collection_concession',
+        'fee_collection_edit',
+        'fee_collection_delete',
+        'fee_collection_transfer',
+    ];
+    const FEE_COLLECTION_SUB_LABELS = {
+        fee_collection_pay: 'Enable Fee Collection (Collect Fees)',
+        fee_collection_concession: 'Enable Fee Concession',
+        fee_collection_edit: 'Enable Edit Transaction (Payment Mode only: Cash / Bank)',
+        fee_collection_delete: 'Enable Cancel Transaction (Cancellation)',
+        fee_collection_transfer: 'Enable Transfer Transaction (Fee Head Transfer only)',
+    };
 
     const OVERALL_CONCESSION_SUBS = [
         'overall_concession_add',
@@ -382,7 +398,7 @@ const UserManagement = () => {
         if (currentPermissions.includes(path)) {
             currentPermissions = currentPermissions.filter(p => p !== path);
             if (path === '/fee-collection') {
-                currentPermissions = currentPermissions.filter(p => p !== 'fee_collection_pay' && p !== 'fee_collection_concession' && p !== 'fee_collection_edit');
+                currentPermissions = currentPermissions.filter(p => !FEE_COLLECTION_SUBS.includes(p));
             }
             if (path === '/reports') {
                 currentPermissions = currentPermissions.filter(p => p !== 'reports_daily_collection' && p !== 'reports_cashier_summary' && p !== 'reports_fee_head_summary' && p !== 'reports_account_wise');
@@ -1300,7 +1316,7 @@ const UserManagement = () => {
                                                                     if (currentPermissions.includes(path)) {
                                                                         currentPermissions = currentPermissions.filter(p => p !== path);
                                                         if (path === '/fee-collection') {
-                                                                            currentPermissions = currentPermissions.filter(p => p !== 'fee_collection_pay' && p !== 'fee_collection_concession' && p !== 'fee_collection_edit');
+                                                                            currentPermissions = currentPermissions.filter(p => !FEE_COLLECTION_SUBS.includes(p));
                                                                         }
                                                                         if (path === '/reports') {
                                                                             currentPermissions = currentPermissions.filter(p => p !== 'reports_daily_collection' && p !== 'reports_cashier_summary' && p !== 'reports_fee_head_summary' && p !== 'reports_account_wise');
@@ -1350,91 +1366,27 @@ const UserManagement = () => {
                                                     {/* Sub-Permissions for Fee Collection */}
                                                     {page.path === '/fee-collection' && (formData.permissions || []).includes('/fee-collection') && (
                                                         <div className="ml-6 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
-                                                            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={(formData.permissions || []).includes('fee_collection_pay')}
-                                                                    onChange={(() => {
-                                                                        const toggle = () => {
-                                                                            let p = formData.permissions || [];
-                                                                            if (p.includes('fee_collection_pay')) p = p.filter(x => x !== 'fee_collection_pay');
-                                                                            else p = [...p, 'fee_collection_pay'];
-                                                                            setFormData({ ...formData, permissions: p });
-                                                                        };
-                                                                        return toggle;
-                                                                    })()}
-                                                                    className="rounded text-blue-600 focus:ring-blue-500"
-                                                                />
-                                                                <span className="text-xs text-gray-600">Enable Fee Collection</span>
-                                                            </label>
-                                                            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={(formData.permissions || []).includes('fee_collection_concession')}
-                                                                    onChange={(() => {
-                                                                        const toggle = () => {
-                                                                            let p = formData.permissions || [];
-                                                                            if (p.includes('fee_collection_concession')) p = p.filter(x => x !== 'fee_collection_concession');
-                                                                            else p = [...p, 'fee_collection_concession'];
-                                                                            setFormData({ ...formData, permissions: p });
-                                                                        };
-                                                                        return toggle;
-                                                                    })()}
-                                                                    className="rounded text-blue-600 focus:ring-blue-500"
-                                                                />
-                                                                <span className="text-xs text-gray-600">Enable Fee Concession</span>
-                                                            </label>
-                                                            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={(formData.permissions || []).includes('fee_collection_edit')}
-                                                                    onChange={(() => {
-                                                                        const toggle = () => {
-                                                                            let p = formData.permissions || [];
-                                                                            if (p.includes('fee_collection_edit')) p = p.filter(x => x !== 'fee_collection_edit');
-                                                                            else p = [...p, 'fee_collection_edit'];
-                                                                            setFormData({ ...formData, permissions: p });
-                                                                        };
-                                                                        return toggle;
-                                                                    })()}
-                                                                    className="rounded text-blue-600 focus:ring-blue-500"
-                                                                />
-                                                                <span className="text-xs text-gray-600">Enable Edit Transaction</span>
-                                                            </label>
-                                                            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={(formData.permissions || []).includes('fee_collection_delete')}
-                                                                    onChange={(() => {
-                                                                        const toggle = () => {
-                                                                            let p = formData.permissions || [];
-                                                                            if (p.includes('fee_collection_delete')) p = p.filter(x => x !== 'fee_collection_delete');
-                                                                            else p = [...p, 'fee_collection_delete'];
-                                                                            setFormData({ ...formData, permissions: p });
-                                                                        };
-                                                                        return toggle;
-                                                                    })()}
-                                                                    className="rounded text-red-600 focus:ring-red-500"
-                                                                />
-                                                                <span className="text-xs text-gray-600">Enable Delete Transaction</span>
-                                                            </label>
-                                                            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={(formData.permissions || []).includes('fee_collection_transfer')}
-                                                                    onChange={(() => {
-                                                                        const toggle = () => {
-                                                                            let p = formData.permissions || [];
-                                                                            if (p.includes('fee_collection_transfer')) p = p.filter(x => x !== 'fee_collection_transfer');
-                                                                            else p = [...p, 'fee_collection_transfer'];
-                                                                            setFormData({ ...formData, permissions: p });
-                                                                        };
-                                                                        return toggle;
-                                                                    })()}
-                                                                    className="rounded text-blue-600 focus:ring-blue-500"
-                                                                />
-                                                                <span className="text-xs text-gray-600">Enable Transfer Transaction</span>
-                                                            </label>
+                                                            {FEE_COLLECTION_SUBS.map(sub => (
+                                                                <label key={sub} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={(formData.permissions || []).includes(sub)}
+                                                                        onChange={(() => {
+                                                                            const toggle = () => {
+                                                                                let p = formData.permissions || [];
+                                                                                if (p.includes(sub)) p = p.filter(x => x !== sub);
+                                                                                else p = [...p, sub];
+                                                                                setFormData({ ...formData, permissions: p });
+                                                                            };
+                                                                            return toggle;
+                                                                        })()}
+                                                                        className={`rounded focus:ring-blue-500 ${sub === 'fee_collection_delete' ? 'text-red-600 focus:ring-red-500' : 'text-blue-600'}`}
+                                                                    />
+                                                                    <span className={`text-xs ${sub === 'fee_collection_delete' ? 'text-red-700 font-medium' : 'text-gray-600'}`}>
+                                                                        {FEE_COLLECTION_SUB_LABELS[sub]}
+                                                                    </span>
+                                                                </label>
+                                                            ))}
                                                         </div>
                                                     )}
 
@@ -1762,7 +1714,7 @@ const UserManagement = () => {
                                                 {/* Sub-Permissions for Fee Collection */}
                                                 {page.path === '/fee-collection' && (roleFormData.permissions || []).includes('/fee-collection') && (
                                                     <div className="ml-6 mt-1 space-y-1 border-l-2 border-gray-200 pl-2">
-                                                        {['fee_collection_pay', 'fee_collection_concession', 'fee_collection_edit', 'fee_collection_delete', 'fee_collection_transfer'].map(sub => (
+                                                        {FEE_COLLECTION_SUBS.map(sub => (
                                                             <label key={sub} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-200 p-1 rounded">
                                                                 <input
                                                                     type="checkbox"
@@ -1770,7 +1722,9 @@ const UserManagement = () => {
                                                                     onChange={() => handleRoleSubPermissionToggle(sub)}
                                                                     className={`rounded focus:ring-blue-500 ${sub === 'fee_collection_delete' ? 'text-red-600' : 'text-blue-600'}`}
                                                                 />
-                                                                <span className="text-xs text-gray-600 capitalize">{sub.replace(/_/g, ' ').replace('fee collection ', '')}</span>
+                                                                <span className={`text-xs ${sub === 'fee_collection_delete' ? 'text-red-700 font-medium' : 'text-gray-600'}`}>
+                                                                    {FEE_COLLECTION_SUB_LABELS[sub]}
+                                                                </span>
                                                             </label>
                                                         ))}
                                                     </div>
@@ -2056,11 +2010,11 @@ const UserManagement = () => {
                                                             {/* Sub-Permissions Display */}
                                                             {page.path === '/fee-collection' && (
                                                                 <div className="mt-1.5 ml-2 space-y-1">
-                                                                    {['fee_collection_pay', 'fee_collection_concession', 'fee_collection_edit', 'fee_collection_delete', 'fee_collection_transfer'].map(sub => (
+                                                                    {FEE_COLLECTION_SUBS.map(sub => (
                                                                         (viewPermissionsModal.user.permissions || []).includes(sub) && (
                                                                             <div key={sub} className="flex items-center gap-1.5 text-[10px] text-gray-600">
                                                                                 <span className="text-green-600">✓</span>
-                                                                                <span className="capitalize">{sub.replace(/_/g, ' ').replace('fee collection ', '')}</span>
+                                                                                <span className="font-medium">{FEE_COLLECTION_SUB_LABELS[sub] || sub}</span>
                                                                             </div>
                                                                         )
                                                                     ))}

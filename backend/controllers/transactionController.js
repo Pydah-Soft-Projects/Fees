@@ -1003,7 +1003,10 @@ const bulkUpdateTransactionDates = async (req, res) => {
   try {
     const isAuthorized = req.user?.role === 'superadmin' ||
       req.user?.role === 'admin' ||
-      (req.user?.permissions && (req.user.permissions.includes('fee_collection_edit') || req.user.permissions.includes('fee_collection_delete')));
+      (req.user?.permissions && (
+        req.user.permissions.includes('/transaction-dates') ||
+        req.user.permissions.includes('transaction_date_change')
+      ));
 
     if (!isAuthorized) {
       return res.status(403).json({ message: 'Forbidden: Insufficient permissions to modify transaction dates' });

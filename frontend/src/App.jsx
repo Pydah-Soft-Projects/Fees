@@ -59,9 +59,12 @@ const ProtectedRoute = ({ children }) => {
     return children;
   }
   
-  // Transaction Dates modification page is allowed if user has edit or delete permissions
+  // Transaction Dates modification page is allowed only if user has explicit permission
   if (location.pathname === '/transaction-dates') {
-    if (permissions.includes('fee_collection_edit') || permissions.includes('fee_collection_delete') || permissions.includes('/fee-collection')) {
+    if (
+      permissions.includes('/transaction-dates') ||
+      permissions.includes('transaction_date_change')
+    ) {
       return children;
     }
   }

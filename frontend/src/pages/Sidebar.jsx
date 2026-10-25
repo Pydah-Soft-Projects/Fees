@@ -222,7 +222,10 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                 permissions.includes('proceedings_approve')
             )) ||
             (item.path === '/overall-concessions' && canViewOverallConcessions) ||
-            (item.path === '/transaction-dates' && (permissions.includes('fee_collection_edit') || permissions.includes('fee_collection_delete')))
+            (item.path === '/transaction-dates' && (
+                permissions.includes('/transaction-dates') ||
+                permissions.includes('transaction_date_change')
+            ))
         );
 
     // Group items by section

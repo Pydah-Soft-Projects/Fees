@@ -125,7 +125,7 @@ const FeeCollection = () => {
     const isSuperAdmin = user?.role === 'superadmin';
     const permissions = user?.permissions || [];
     const canCollectFee = permissions.includes('fee_collection_pay');
-    const canEditTransactionDate = isSuperAdmin || permissions.includes('fee_collection_edit');
+    const canEditTransactionDate = isSuperAdmin || permissions.includes('/transaction-dates') || permissions.includes('transaction_date_change');
     const canTransferFee = isSuperAdmin || permissions.includes('fee_collection_transfer');
 
     const [actionTab, setActionTab] = useState('collect'); // 'collect' or 'transfer'

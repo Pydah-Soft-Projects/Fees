@@ -56,8 +56,16 @@ const API_ACCESS_RULES = [
     permissions: ['/fee-collection', '/concessions', '/user-management'],
   },
   {
+    prefix: '/api/transactions/by-date',
+    permissions: ['/transaction-dates', 'transaction_date_change'],
+  },
+  {
+    prefix: '/api/transactions/bulk-date-update',
+    permissions: ['/transaction-dates', 'transaction_date_change'],
+  },
+  {
     prefix: '/api/transactions',
-    permissions: ['/fee-collection', '/bulk-fee-upload'],
+    permissions: ['/fee-collection', '/bulk-fee-upload', '/transaction-dates', 'transaction_date_change', 'fee_collection_edit', 'fee_collection_delete'],
   },
   {
     prefix: '/api/permissions',

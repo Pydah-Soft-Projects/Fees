@@ -10,8 +10,8 @@ const TransactionDateModification = () => {
     const permissions = Array.isArray(user.permissions) ? user.permissions : [];
 
     const canAccess = role === 'superadmin' || role === 'admin' ||
-        permissions.includes('fee_collection_edit') ||
-        permissions.includes('fee_collection_delete');
+        permissions.includes('/transaction-dates') ||
+        permissions.includes('transaction_date_change');
 
     const getTodayFormatted = () => {
         const d = new Date();
