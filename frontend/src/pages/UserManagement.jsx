@@ -40,6 +40,8 @@ const UserManagement = () => {
         courses: [],
         permissions: [],
         employeeId: null,
+        division: '',
+        department: '',
         email: '',
         mobile: '',
         isActive: true
@@ -136,11 +138,15 @@ const UserManagement = () => {
     };
 
     const selectEmployee = (emp) => {
+        const divisionName = emp.division_id?.division_name || emp.division_id?.name || '';
+        const departmentName = emp.department_id?.department_name || emp.department_id?.name || '';
         setFormData({
             ...formData,
             name: emp.employee_name,
             username: emp.emp_no,
             employeeId: emp._id, // Store ID for backend linking
+            division: divisionName,
+            department: departmentName,
             password: '' // Clear password as it's not needed
         });
         setSearchResults([]);
@@ -152,6 +158,8 @@ const UserManagement = () => {
             name: '',
             username: '',
             employeeId: null,
+            division: '',
+            department: '',
             password: ''
         });
     };
@@ -340,7 +348,7 @@ const UserManagement = () => {
                 setUsers([res.data, ...users]);
                 setMessage('User created successfully!');
             }
-            setFormData({ name: '', username: '', password: '', role: '', campuses: [], colleges: [], courses: [], permissions: [], employeeId: null, email: '', mobile: '', isActive: true });
+            setFormData({ name: '', username: '', password: '', role: '', division: '', department: '', campuses: [], colleges: [], courses: [], permissions: [], employeeId: null, email: '', mobile: '', isActive: true });
             setShowCreateEditModal(false);
             setTimeout(() => setMessage(''), 3000);
         } catch (error) {
@@ -357,6 +365,8 @@ const UserManagement = () => {
             password: '',
             role: user.role,
             college: user.college || '',
+            division: user.division || '',
+            department: user.department || '',
             campuses: user.campuses || [],
             colleges: user.colleges || [],
             courses: user.courses || [],
@@ -371,13 +381,13 @@ const UserManagement = () => {
     };
 
     const handleCancelEdit = () => {
-        setFormData({ name: '', username: '', password: '', role: '', campuses: [], colleges: [], courses: [], employeeId: null, permissions: [], email: '', mobile: '', isActive: true });
+        setFormData({ name: '', username: '', password: '', role: '', division: '', department: '', campuses: [], colleges: [], courses: [], employeeId: null, permissions: [], email: '', mobile: '', isActive: true });
         setEditingUserId(null);
         setShowCreateEditModal(false);
     };
 
     const openCreateModal = () => {
-        setFormData({ name: '', username: '', password: '', role: '', campuses: [], colleges: [], courses: [], permissions: [], employeeId: null, email: '', mobile: '', isActive: true });
+        setFormData({ name: '', username: '', password: '', role: '', division: '', department: '', campuses: [], colleges: [], courses: [], permissions: [], employeeId: null, email: '', mobile: '', isActive: true });
         setEditingUserId(null);
         setShowCreateEditModal(true);
     };
@@ -723,10 +733,11 @@ const UserManagement = () => {
                                     <table className="w-full text-left text-xs">
                                         <thead className="bg-gray-50 border-b border-gray-200">
                                             <tr>
-                                                <th className="p-3 font-semibold text-gray-600">Name</th>
+                                                <th className="p-3 font-semibold text-gray-600 text-left">Name</th>
                                                 <th className="p-3 font-semibold text-gray-600">Username</th>
                                                 <th className="p-3 font-semibold text-gray-600">Role</th>
-                                                <th className="p-3 font-semibold text-gray-600">Email</th>
+                                                <th className="p-3 font-semibold text-gray-600">Division</th>
+                                                <th className="p-3 font-semibold text-gray-600">Department</th>
                                                 <th className="p-3 font-semibold text-gray-600">Mobile</th>
                                                 <th className="p-3 font-semibold text-gray-600">Status</th>
                                                 <th className="p-3 font-semibold text-gray-600">College Scope</th>
@@ -736,10 +747,11 @@ const UserManagement = () => {
                                         <tbody className="divide-y divide-gray-100">
                                             {[1, 2, 3, 4, 5].map((idx) => (
                                                 <tr key={idx} className="animate-pulse">
-                                                    <td className="p-3"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
+                                                    <td className="p-3 text-left"><div className="h-4 bg-gray-200 rounded w-28"></div></td>
                                                     <td className="p-3"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
                                                     <td className="p-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
-                                                    <td className="p-3"><div className="h-4 bg-gray-200 rounded w-32"></div></td>
+                                                    <td className="p-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
+                                                    <td className="p-3"><div className="h-4 bg-gray-200 rounded w-20"></div></td>
                                                     <td className="p-3"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
                                                     <td className="p-3"><div className="h-5 bg-gray-200 rounded-full w-14"></div></td>
                                                     <td className="p-3"><div className="h-4 bg-gray-200 rounded w-36"></div></td>
@@ -758,10 +770,11 @@ const UserManagement = () => {
                                     <table className="w-full text-left text-xs">
                                         <thead className="bg-gray-50 border-b">
                                             <tr>
-                                                <th className="p-3 font-semibold text-gray-600">Name</th>
+                                                <th className="p-3 font-semibold text-gray-600 text-left">Name</th>
                                                 <th className="p-3 font-semibold text-gray-600">Username</th>
                                                 <th className="p-3 font-semibold text-gray-600">Role</th>
-                                                <th className="p-3 font-semibold text-gray-600">Email</th>
+                                                <th className="p-3 font-semibold text-gray-600">Division</th>
+                                                <th className="p-3 font-semibold text-gray-600">Department</th>
                                                 <th className="p-3 font-semibold text-gray-600">Mobile</th>
                                                 <th className="p-3 font-semibold text-gray-600">Status</th>
                                                 <th className="p-3 font-semibold text-gray-600">College Scope</th>
@@ -776,7 +789,9 @@ const UserManagement = () => {
                                                         const term = searchTerm.toLowerCase().trim();
                                                         const nameMatch = (user.name || '').toLowerCase().includes(term);
                                                         const usernameMatch = (user.username || '').toLowerCase().includes(term);
-                                                        if (!nameMatch && !usernameMatch) return false;
+                                                        const divisionMatch = (user.division || '').toLowerCase().includes(term);
+                                                        const departmentMatch = (user.department || '').toLowerCase().includes(term);
+                                                        if (!nameMatch && !usernameMatch && !divisionMatch && !departmentMatch) return false;
                                                     }
 
                                                     // Status Filter
@@ -809,10 +824,10 @@ const UserManagement = () => {
                                                 })
                                                 .map(user => (
                                                 <tr key={user._id} className="hover:bg-gray-50">
-                                                    <td className="p-3 font-medium text-gray-900">
+                                                    <td className="p-3 font-medium text-gray-900 text-left">
                                                         <button
                                                             onClick={() => openViewPermissionsModal(user)}
-                                                            className="text-blue-600 hover:text-blue-800 hover:underline font-bold cursor-pointer"
+                                                            className="text-blue-600 hover:text-blue-800 hover:underline font-bold cursor-pointer text-left inline-block"
                                                             title="Click to view permissions"
                                                         >
                                                             {user.name}
@@ -828,7 +843,20 @@ const UserManagement = () => {
                                                              {user.role}
                                                          </span>
                                                     </td>
-                                                    <td className="p-3 text-gray-500 text-xs">{user.email || '—'}</td>
+                                                    <td className="p-3 text-gray-700 text-xs font-semibold whitespace-nowrap">
+                                                        {user.division ? (
+                                                            <span className="bg-slate-100 text-slate-700 font-semibold px-2 py-0.5 rounded border border-slate-200">
+                                                                {user.division}
+                                                            </span>
+                                                        ) : '—'}
+                                                    </td>
+                                                    <td className="p-3 text-gray-700 text-xs font-semibold whitespace-nowrap">
+                                                        {user.department ? (
+                                                            <span className="bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded border border-indigo-100">
+                                                                {user.department}
+                                                            </span>
+                                                        ) : '—'}
+                                                    </td>
                                                     <td className="p-3 text-gray-500 text-xs">{user.mobile || '—'}</td>
                                                     <td className="p-3">
                                                         {user.isActive === false ? (
@@ -919,7 +947,9 @@ const UserManagement = () => {
                                         const term = searchTerm.toLowerCase().trim();
                                         const nameMatch = (user.name || '').toLowerCase().includes(term);
                                         const usernameMatch = (user.username || '').toLowerCase().includes(term);
-                                        return nameMatch || usernameMatch;
+                                        const divisionMatch = (user.division || '').toLowerCase().includes(term);
+                                        const departmentMatch = (user.department || '').toLowerCase().includes(term);
+                                        return nameMatch || usernameMatch || divisionMatch || departmentMatch;
                                     }).length === 0 && (
                                         <p className="text-center py-6 text-gray-400 italic">No matching users found.</p>
                                     )}
@@ -1077,15 +1107,29 @@ const UserManagement = () => {
                                                 )}
                                             </>
                                         ) : (
-                                            <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-200 rounded mt-1">
+                                            <div className="flex items-center justify-between p-2.5 bg-blue-50 border border-blue-200 rounded-lg mt-1">
                                                 <div>
                                                     <p className="font-bold text-sm text-blue-900">{formData.name}</p>
-                                                    <p className="text-xs text-blue-700">Emp No: {formData.username}</p>
+                                                    <p className="text-xs text-blue-700 font-mono">Emp No: {formData.username}</p>
+                                                    {(formData.division || formData.department) && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            {formData.division && (
+                                                                <span className="bg-blue-100 text-blue-800 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                                                    {formData.division}
+                                                                </span>
+                                                            )}
+                                                            {formData.department && (
+                                                                <span className="bg-indigo-100 text-indigo-800 font-bold px-1.5 py-0.5 rounded text-[10px]">
+                                                                    {formData.department}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <button
                                                     type="button"
                                                     onClick={clearSelectedEmployee}
-                                                    className="text-red-500 hover:text-red-700 text-xs font-bold px-2"
+                                                    className="text-red-500 hover:text-red-700 text-xs font-bold px-2 cursor-pointer"
                                                 >
                                                     Change
                                                 </button>
@@ -1156,6 +1200,31 @@ const UserManagement = () => {
                                                 </>
                                             )}
                                         </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 uppercase">Division</label>
+                                            <input
+                                                type="text"
+                                                name="division"
+                                                value={formData.division || ''}
+                                                onChange={handleChange}
+                                                className="w-full border p-2 rounded mt-1 text-xs"
+                                                placeholder="e.g. Engineering, Degree"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 uppercase">Department</label>
+                                            <input
+                                                type="text"
+                                                name="department"
+                                                value={formData.department || ''}
+                                                onChange={handleChange}
+                                                className="w-full border p-2 rounded mt-1 text-xs"
+                                                placeholder="e.g. CSE, ECE, Accounts"
+                                            />
+                                        </div>
                                     </div>
 
                                     <div>
@@ -1923,6 +1992,27 @@ const UserManagement = () => {
                                         </span>
                                     </p>
                                 </div>
+
+                                {(viewPermissionsModal.user.division || viewPermissionsModal.user.department) && (
+                                    <>
+                                        {viewPermissionsModal.user.division && (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Division</label>
+                                                <p className="text-sm font-semibold text-gray-700 p-2 bg-gray-50 rounded border border-gray-100">
+                                                    {viewPermissionsModal.user.division}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {viewPermissionsModal.user.department && (
+                                            <div>
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Department</label>
+                                                <p className="text-sm font-semibold text-gray-700 p-2 bg-gray-50 rounded border border-gray-100">
+                                                    {viewPermissionsModal.user.department}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
 
                                 {/* User-specific details */}
                                 {viewPermissionsModal.user.email && (

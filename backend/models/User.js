@@ -22,6 +22,12 @@ const userSchema = mongoose.Schema({
     type: String,
     default: 'office_staff',
   },
+  division: {
+    type: String,
+  },
+  department: {
+    type: String,
+  },
   college: {
     type: String, // College name for role-based scoping
   },

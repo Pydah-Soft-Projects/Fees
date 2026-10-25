@@ -10,11 +10,23 @@ const getUsers = async (req, res) => {
 
     try {
       const getEmployeeModel = require('../models/Employee');
+      const getDepartmentModel = require('../models/Department');
+      const getDivisionModel = require('../models/Division');
+      const getDesignationModel = require('../models/Designation');
+
+      getDepartmentModel();
+      getDivisionModel();
+      getDesignationModel();
+
       const Employee = getEmployeeModel();
       if (Employee) {
         const empIds = users.filter(u => u.employeeId).map(u => u.employeeId);
         if (empIds.length > 0) {
-          const employees = await Employee.find({ _id: { $in: empIds } }).select('is_active email phone_number dynamicFields');
+          const employees = await Employee.find({ _id: { $in: empIds } })
+            .select('is_active email phone_number division_id department_id designation_id dynamicFields')
+            .populate('division_id', 'division_name name')
+            .populate('department_id', 'department_name name')
+            .populate('designation_id', 'designation_name name');
           const empMap = employees.reduce((acc, emp) => {
             acc[emp._id.toString()] = emp;
             return acc;
@@ -24,6 +36,14 @@ const getUsers = async (req, res) => {
             if (u.employeeId && empMap[u.employeeId.toString()]) {
               const emp = empMap[u.employeeId.toString()];
               u.hrmsActive = emp.is_active;
+
+              const divisionName = emp.division_id?.division_name || emp.division_id?.name || (emp.dynamicFields && (emp.dynamicFields.division || emp.dynamicFields.division_name)) || '';
+              const departmentName = emp.department_id?.department_name || emp.department_id?.name || (emp.dynamicFields && (emp.dynamicFields.department || emp.dynamicFields.department_name)) || '';
+              const designationName = emp.designation_id?.designation_name || emp.designation_id?.name || '';
+
+              u.division = u.division || divisionName;
+              u.department = u.department || departmentName;
+              u.designation = u.designation || designationName;
 
               // Fallback for Email
               if (!u.email) {
@@ -63,11 +83,31 @@ const getMe = async (req, res) => {
     if (user.employeeId) {
       try {
         const getEmployeeModel = require('../models/Employee');
+        const getDepartmentModel = require('../models/Department');
+        const getDivisionModel = require('../models/Division');
+        const getDesignationModel = require('../models/Designation');
+
+        getDepartmentModel();
+        getDivisionModel();
+        getDesignationModel();
+
         const Employee = getEmployeeModel();
         if (Employee) {
-          const emp = await Employee.findById(user.employeeId).select('is_active email phone_number dynamicFields');
+          const emp = await Employee.findById(user.employeeId)
+            .select('is_active email phone_number division_id department_id designation_id dynamicFields')
+            .populate('division_id', 'division_name name')
+            .populate('department_id', 'department_name name')
+            .populate('designation_id', 'designation_name name');
           if (emp) {
             user.hrmsActive = emp.is_active;
+
+            const divisionName = emp.division_id?.division_name || emp.division_id?.name || (emp.dynamicFields && (emp.dynamicFields.division || emp.dynamicFields.division_name)) || '';
+            const departmentName = emp.department_id?.department_name || emp.department_id?.name || (emp.dynamicFields && (emp.dynamicFields.department || emp.dynamicFields.department_name)) || '';
+            const designationName = emp.designation_id?.designation_name || emp.designation_id?.name || '';
+
+            user.division = user.division || divisionName;
+            user.department = user.department || departmentName;
+            user.designation = user.designation || designationName;
 
             // Fallback for Email
             if (!user.email) {
@@ -121,7 +161,7 @@ const updateUserPaymentAccess = async (req, res) => {
 const createUser = async (req, res) => {
   // console.log('\n[USER CREATION DEBUG] -----------------------------------------');
   // console.log('[USER CREATION DEBUG] Received Payload:', req.body);
-  const { name, username, password, role, college, colleges, campuses, courses, employeeId, permissions, email, mobile, isActive } = req.body;
+  const { name, username, password, role, college, colleges, campuses, courses, employeeId, permissions, email, mobile, isActive, division, department } = req.body;
 
   // Only superadmins can create a superadmin
   if (role === 'superadmin' && req.user.role !== 'superadmin') {
@@ -176,7 +216,9 @@ const createUser = async (req, res) => {
       permissions: permissions || [], // Save permissions if provided
       email: email || undefined,
       mobile: mobile || undefined,
-      isActive: isActive !== undefined ? isActive : true
+      isActive: isActive !== undefined ? isActive : true,
+      division: division || undefined,
+      department: department || undefined
     });
 
     // console.log(`[USER CREATION DEBUG] User created successfully: ${user._id}`);
@@ -195,7 +237,9 @@ const createUser = async (req, res) => {
         permissions: user.permissions,
         email: user.email,
         mobile: user.mobile,
-        isActive: user.isActive
+        isActive: user.isActive,
+        division: user.division,
+        department: user.department
       });
     } else {
       res.status(400).json({ message: 'Invalid user data' });
@@ -264,7 +308,7 @@ const updateUserPermissions = async (req, res) => {
 };
 
 const updateUser = async (req, res) => {
-  const { name, username, password, role, college, colleges, campuses, courses, permissions, email, mobile, isActive } = req.body;
+  const { name, username, password, role, college, colleges, campuses, courses, permissions, email, mobile, isActive, division, department } = req.body;
 
   try {
     const user = await User.findById(req.params.id);
@@ -310,6 +354,14 @@ const updateUser = async (req, res) => {
     // Update permissions if provided
     if (permissions) {
       user.permissions = permissions;
+    }
+
+    if (division !== undefined) {
+      user.division = division;
+    }
+
+    if (department !== undefined) {
+      user.department = department;
     }
 
     if (email !== undefined) {
