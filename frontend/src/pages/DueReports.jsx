@@ -183,6 +183,7 @@ const DueReports = () => {
     const [activeTab, setActiveTab] = useState('report');
     const [excludeScholarship, setExcludeScholarship] = useState(true);
     const [reportMode, setReportMode] = useState('academicYear'); // 'academicYear' | 'batch'
+    const [receiptSettings, setReceiptSettings] = useState(null);
 
 
 
@@ -199,9 +200,10 @@ const DueReports = () => {
     useEffect(() => {
         const fetchMetadata = async () => {
             try {
-                const [metaRes, headsRes] = await Promise.all([
+                const [metaRes, headsRes, settingsRes] = await Promise.all([
                     api.get('/students/metadata'),
-                    api.get('/fee-heads?all=true')
+                    api.get('/fee-heads?all=true'),
+                    api.get('/settings').catch(() => ({ data: null }))
                 ]);
                 const response = metaRes;
                 const meta = response.data.hierarchy || response.data;
@@ -217,6 +219,9 @@ const DueReports = () => {
                 setColleges(Object.keys(meta));
                 setStudentStatuses(statusList);
                 setFeeHeads(Array.isArray(headsRes.data) ? headsRes.data : []);
+                if (settingsRes?.data) {
+                    setReceiptSettings(settingsRes.data);
+                }
                 
                 // Generate academic years on load
                 const years = generateAcademicYears();
@@ -567,12 +572,21 @@ const DueReports = () => {
 
         // Data Rows
         const dataRows = [];
+        const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
         if (isBatch) {
             filteredData.forEach((st, idx) => {
                 const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
                 const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
                 const studType = st.stud_type || st.student_type || st.quota || '—';
-                const batchOverallDue = batchYearsList.reduce((sum, y) => sum + Number(st.yearDues?.[y] || 0), 0);
+                const studentCurrentYear = Number(st.current_year || 1);
+                const yearVals = batchYearsList.map(y => {
+                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return '-';
+                    return Number(st.yearDues?.[y] || 0);
+                });
+                const batchOverallDue = batchYearsList.reduce((sum, y) => {
+                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return sum;
+                    return sum + Number(st.yearDues?.[y] || 0);
+                }, 0);
                 const row = [
                     idx + 1,
                     st.pin_no || '—',
@@ -580,7 +594,7 @@ const DueReports = () => {
                     nameWithSch,
                     studType,
                     courseBranch,
-                    ...batchYearsList.map(y => Number(st.yearDues?.[y] || 0)),
+                    ...yearVals,
                     batchOverallDue
                 ];
                 dataRows.push(row);
@@ -620,11 +634,15 @@ const DueReports = () => {
             batchYearsList.forEach(y => { sumBatchYears[y] = 0; });
             let sumOverallDue = 0;
             filteredData.forEach(st => {
+                const studentCurrentYear = Number(st.current_year || 1);
+                let stDue = 0;
                 batchYearsList.forEach(y => {
-                    sumBatchYears[y] += Number(st.yearDues?.[y] || 0);
+                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return;
+                    const val = Number(st.yearDues?.[y] || 0);
+                    sumBatchYears[y] += val;
+                    stDue += val;
                 });
-                const batchOverallDue = batchYearsList.reduce((sum, y) => sum + Number(st.yearDues?.[y] || 0), 0);
-                sumOverallDue += batchOverallDue;
+                sumOverallDue += stDue;
             });
             totalRow = [
                 "TOTAL", "", "", "", "", "",
@@ -874,8 +892,14 @@ const DueReports = () => {
                     alignH = 'right';
                     if (c >= 6 && c < 6 + batchYearsList.length) {
                         cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
-                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
-                        isBold = Number(rawVal) > 0;
+                        if (rawVal === '-' || rawVal === '—') {
+                            alignH = 'center';
+                            fontColor = '94A3B8';
+                            isBold = false;
+                        } else {
+                            fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
+                            isBold = Number(rawVal) > 0;
+                        }
                     } else {
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '16A34A';
                         isBold = true;
@@ -974,9 +998,10 @@ const DueReports = () => {
         });
     }, [reportData, sortField, sortDir]);
 
-    // Recalculate student amounts based on scholarship toggle and/or fee-head filter
+    // Recalculate student amounts based on scholarship toggle, fee-head filter, and showCardsUpToCurrentYear setting
     const processedData = React.useMemo(() => {
         const hasFeeHeadFilter = selectedFeeHeadIds.length > 0;
+        const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
 
         const selectedIdSet = new Set(selectedFeeHeadIds.map((id) => String(id)));
         const selectedCodeSet = new Set(
@@ -1004,16 +1029,19 @@ const DueReports = () => {
         const buildYearAndHeadBreakdown = (student, isStudentScholarEligible) => {
             const yearDues = {};
             const headMap = {};
+            const studentCurrentYear = Number(student.current_year || 1);
 
             (student.rawGroupedData || []).forEach(item => {
                 if (!itemMatchesFeeHeadFilter(item)) return;
+
+                const yr = Number(item.studentYear || 1);
+                if (restrictToCurrentYear && yr > studentCurrentYear) return;
 
                 const feeCode = String(item.feeHeadCode || '').toUpperCase();
                 const isServiceFee = feeCode === 'HST01' || feeCode === 'TRN' || feeCode === 'TRN01';
                 const shouldExclude = excludeScholarship && isStudentScholarEligible && item.isScholarshipApplicable && !isServiceFee;
                 if (shouldExclude) return;
 
-                const yr = Number(item.studentYear || 1);
                 const itemDue = Math.max(0, (item.totalAmount || 0) - (item.paidAmount || 0) - (item.concessionAmount || 0));
 
                 yearDues[yr] = (yearDues[yr] || 0) + itemDue;
@@ -1042,8 +1070,15 @@ const DueReports = () => {
             return sortedData.map(student => {
                 const breakdown = buildYearAndHeadBreakdown(student, false);
                 const currentSelectedYr = Number(filters.year || student.current_year || 1);
+                const studentCurrentYear = Number(student.current_year || 1);
                 let prevDueCalc = student.previousDue != null ? Number(student.previousDue) : 0;
-                const sourceYearDues = student.yearDues || breakdown.yearDues || {};
+                const rawSourceYearDues = student.yearDues || breakdown.yearDues || {};
+                const sourceYearDues = {};
+                Object.entries(rawSourceYearDues).forEach(([yrStr, val]) => {
+                    if (restrictToCurrentYear && Number(yrStr) > studentCurrentYear) return;
+                    sourceYearDues[yrStr] = val;
+                });
+
                 if (student.previousDue == null && sourceYearDues) {
                     Object.entries(sourceYearDues).forEach(([yrStr, yrDue]) => {
                         const yrNum = Number(yrStr);
@@ -1174,6 +1209,12 @@ const DueReports = () => {
 
             (student.rawGroupedData || []).forEach(item => {
                 if (!itemMatchesFeeHeadFilter(item)) {
+                    return;
+                }
+
+                const yr = Number(item.studentYear || 1);
+                const studentCurrentYear = Number(student.current_year || 1);
+                if (restrictToCurrentYear && yr > studentCurrentYear) {
                     return;
                 }
 
@@ -1334,7 +1375,7 @@ const DueReports = () => {
                 ...(hasFeeHeadFilter ? { feeDetailsArray } : {})
             };
         });
-    }, [sortedData, excludeScholarship, selectedFeeHeadIds, feeHeads, filters.year]);
+    }, [sortedData, excludeScholarship, selectedFeeHeadIds, feeHeads, filters.year, receiptSettings]);
 
     const feeHeadFilterOptions = React.useMemo(() => (
         [...feeHeads]
@@ -1385,14 +1426,17 @@ const DueReports = () => {
     const batchYearDueTotals = React.useMemo(() => {
         if (reportMode !== 'batch') return {};
         const totals = {};
+        const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
         batchYearsList.forEach(y => { totals[y] = 0; });
         filteredData.forEach(student => {
+            const studentCurrentYear = Number(student.current_year || 1);
             batchYearsList.forEach(y => {
+                if (restrictToCurrentYear && Number(y) > studentCurrentYear) return;
                 totals[y] += (student.yearDues?.[y] || 0);
             });
         });
         return totals;
-    }, [reportMode, batchYearsList, filteredData]);
+    }, [reportMode, batchYearsList, filteredData, receiptSettings]);
 
     const totalColSpan = React.useMemo(() => {
         return reportMode === 'batch' ? (7 + batchYearsList.length) : (11 + maxTerms);
@@ -2182,12 +2226,20 @@ const DueReports = () => {
                                                                         {[student.course, student.branch].filter(Boolean).join(' - ') || '-'}
                                                                     </td>
                                                                     {batchYearsList.map(yr => {
-                                                                        const yrDue = student.yearDues?.[yr] || 0;
+                                                                        const yrNum = Number(yr);
+                                                                        const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
+                                                                        const studentCurrentYear = Number(student.current_year || 1);
+                                                                        const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
+                                                                        const yrDue = isFutureYear ? 0 : (student.yearDues?.[yr] || 0);
                                                                         return (
                                                                             <td key={yr} className="p-2 text-right bg-blue-50/5">
-                                                                                <div className={yrDue > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                                    ₹{yrDue.toLocaleString('en-IN')}
-                                                                                </div>
+                                                                                {isFutureYear ? (
+                                                                                    <div className="text-gray-300 italic text-[11px] select-none" title={`Student current year is ${studentCurrentYear}`}>—</div>
+                                                                                ) : (
+                                                                                    <div className={yrDue > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                        ₹{yrDue.toLocaleString('en-IN')}
+                                                                                    </div>
+                                                                                )}
                                                                             </td>
                                                                         );
                                                                     })}
@@ -2270,12 +2322,20 @@ const DueReports = () => {
                                                                                                                 {fh.headName} {fh.headCode ? <span className="text-gray-400 font-normal">({fh.headCode})</span> : ''}
                                                                                                             </td>
                                                                                                             {batchYearsList.map(yr => {
-                                                                                                                const dVal = fh.yearDues?.[yr] || 0;
+                                                                                                                const yrNum = Number(yr);
+                                                                                                                const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
+                                                                                                                const studentCurrentYear = Number(student.current_year || 1);
+                                                                                                                const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
+                                                                                                                const dVal = isFutureYear ? 0 : (fh.yearDues?.[yr] || 0);
                                                                                                                 return (
                                                                                                                     <td key={yr} className="py-2.5 text-right font-medium bg-blue-50/5">
-                                                                                                                        <span className={dVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                                                                            ₹{dVal.toLocaleString('en-IN')}
-                                                                                                                        </span>
+                                                                                                                        {isFutureYear ? (
+                                                                                                                            <span className="text-gray-300 italic text-[11px] select-none">—</span>
+                                                                                                                        ) : (
+                                                                                                                            <span className={dVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                                                ₹{dVal.toLocaleString('en-IN')}
+                                                                                                                            </span>
+                                                                                                                        )}
                                                                                                                     </td>
                                                                                                                 );
                                                                                                             })}
@@ -2287,15 +2347,29 @@ const DueReports = () => {
                                                                                                     <tr className="bg-gray-50/80 font-bold border-t-2 border-gray-200">
                                                                                                         <td className="py-2 text-gray-800">Total Dues</td>
                                                                                                         {batchYearsList.map(yr => {
-                                                                                                            const yTotal = student.yearDues?.[yr] || 0;
+                                                                                                            const yrNum = Number(yr);
+                                                                                                            const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
+                                                                                                            const studentCurrentYear = Number(student.current_year || 1);
+                                                                                                            const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
+                                                                                                            const yTotal = isFutureYear ? 0 : (student.yearDues?.[yr] || 0);
                                                                                                             return (
                                                                                                                 <td key={yr} className="py-2 text-right text-red-600 font-bold bg-blue-50/10">
-                                                                                                                    ₹{yTotal.toLocaleString('en-IN')}
+                                                                                                                    {isFutureYear ? (
+                                                                                                                        <span className="text-gray-300 italic text-[11px] font-normal select-none">—</span>
+                                                                                                                    ) : (
+                                                                                                                        `₹${yTotal.toLocaleString('en-IN')}`
+                                                                                                                    )}
                                                                                                                 </td>
                                                                                                             );
                                                                                                         })}
                                                                                                         <td className="py-2 text-right text-red-600 font-bold">
-                                                                                                            ₹{(batchYearsList.reduce((sum, yr) => sum + (student.yearDues?.[yr] || 0), 0)).toLocaleString('en-IN')}
+                                                                                                            ₹{(batchYearsList.reduce((sum, yr) => {
+                                                                                                                const yrNum = Number(yr);
+                                                                                                                const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
+                                                                                                                const studentCurrentYear = Number(student.current_year || 1);
+                                                                                                                if (restrictToCurrentYear && yrNum > studentCurrentYear) return sum;
+                                                                                                                return sum + (student.yearDues?.[yr] || 0);
+                                                                                                            }, 0)).toLocaleString('en-IN')}
                                                                                                         </td>
                                                                                                     </tr>
                                                                                                 </>

@@ -6,6 +6,7 @@ const collegeScope = require('../utils/collegeScope');
 const { buildReportDateFilter, applyReportDateToMatch, buildIstDayBounds, buildCollectionDateMatch } = require('../utils/reportDateFilter');
 
 const FeeStructure = require('../models/FeeStructure');
+const Setting = require('../models/Setting');
 const ServiceLateFeeConfig = require('../models/ServiceLateFeeConfig');
 const DefaultLateFeeConfig = require('../models/DefaultLateFeeConfig');
 const { allocateTermBalances, resolveEffectiveTerms, isDeclarationConcessionTxn } = require('../utils/termConcessionAllocation');
@@ -1543,7 +1544,7 @@ const getDueReports = async (req, res) => {
         const allIdentifiers = [...new Set([...studentIds, ...pinNumbers])]; // Unique list of all IDs
 
         // Bulk fetch Mongoose documents
-        const [applicableStructures, rawStudentFees, transactions, feeHeads, serviceConfigs, defaultConfigs] = await Promise.all([
+        const [applicableStructures, rawStudentFees, transactions, feeHeads, serviceConfigs, defaultConfigs, setting] = await Promise.all([
             FeeStructure.find({
                 college: { $in: [...new Set(students.map(s => s.college).filter(Boolean))] },
                 course: { $in: [...new Set(students.map(s => s.course).filter(Boolean))] },
@@ -1555,8 +1556,11 @@ const getDueReports = async (req, res) => {
             Transaction.find({ studentId: { $in: allIdentifiers }, status: { $ne: 'cancelled' } }).lean(),
             mongoose.model('FeeHead').find().lean(),
             ServiceLateFeeConfig.find({ isActive: { $ne: false } }).lean(),
-            DefaultLateFeeConfig.find({ isActive: true }).lean()
+            DefaultLateFeeConfig.find({ isActive: true }).lean(),
+            Setting.findOne().lean()
         ]);
+
+        const restrictToCurrentYear = setting?.showCardsUpToCurrentYear !== false;
 
         // Filter out orphan 'Default' college demands per student if real college demands exist
         const studentHasRealCollegeFeesMap = {};
@@ -1797,11 +1801,15 @@ const getDueReports = async (req, res) => {
 
             const allSDemands = [];
             const sDemands = [];
+            const studentCurrentYear = Number(student.current_year || 1);
             identifiers.forEach(id => {
                 if (studentDemandsMap[id]) {
                     studentDemandsMap[id].forEach(fee => {
+                        const feeYear = Number(fee.studentYear || 1);
+                        if (restrictToCurrentYear && feeYear > studentCurrentYear) {
+                            return;
+                        }
                         allSDemands.push(fee);
-                        const feeYear = Number(fee.studentYear);
                         const isYearMatched = 
                             yearNumbersList && yearNumbersList.length > 0 
                                 ? yearNumbersList.includes(feeYear)
@@ -1835,8 +1843,11 @@ const getDueReports = async (req, res) => {
             identifiers.forEach(id => {
                 if (studentTransactionsMap[id]) {
                     studentTransactionsMap[id].forEach(t => {
+                        const txnYear = Number(t.studentYear || 1);
+                        if (restrictToCurrentYear && txnYear > studentCurrentYear) {
+                            return;
+                        }
                         allSTransactions.push(t);
-                        const txnYear = Number(t.studentYear);
                         const isYearMatched = 
                             yearNumbersList && yearNumbersList.length > 0 
                                 ? yearNumbersList.includes(txnYear)
@@ -2237,11 +2248,15 @@ const getDueReports = async (req, res) => {
             const studentYearDues = {};
             Object.values(allYearsGroupedData).forEach(item => {
                 const yr = Number(item.studentYear || 1);
+                if (restrictToCurrentYear && yr > studentCurrentYear) {
+                    return;
+                }
                 item.dueAmount = Math.max(0, (item.totalAmount || 0) - (item.paidAmount || 0) - (item.concessionAmount || 0));
                 if (!studentYearDues[yr]) studentYearDues[yr] = 0;
                 studentYearDues[yr] += item.dueAmount;
             });
             student.yearDues = studentYearDues;
+            student.restrictToCurrentYear = restrictToCurrentYear;
 
             student.rawGroupedData = Object.values(groupedData).map(item => ({
                 feeHeadId: item.feeHeadId,
