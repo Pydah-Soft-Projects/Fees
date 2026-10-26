@@ -31,6 +31,8 @@ const buildContentSecurityPolicy = () => {
     "base-uri 'self'",
     // Prevents Clickjacking by restricting framing to same origin only
     "frame-ancestors 'self'",
+    // Directs browser to upgrade HTTP to HTTPS
+    "upgrade-insecure-requests",
   ];
 
   return directives.join('; ');
@@ -57,8 +59,10 @@ const securityHeaders = (req, res, next) => {
   // 6. Additional Defense-in-Depth Headers
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('X-XSS-Protection', '1; mode=block');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(self)');
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
 
   next();
 };

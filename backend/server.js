@@ -84,6 +84,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cors());
 
+app.get('/', (req, res) => {
+  res.json({ status: 'active', message: 'Pydah Fee Management API' });
+});
+
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running' });
 });
