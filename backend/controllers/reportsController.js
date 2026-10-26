@@ -2293,7 +2293,11 @@ const getDueReports = async (req, res) => {
             student.termDues = termDues;
             student.termDueDates = termDueDates;
             student.concessionAmount = (academicSummary.concession || 0) + (hostelSummary.concession || 0) + (transportSummary.concession || 0);
-            student.dueAmount = Math.max(0, student.totalFee - student.paidAmount - student.concessionAmount);
+            if (reportType === 'batch') {
+                student.dueAmount = Object.values(studentYearDues).reduce((a, b) => a + Number(b || 0), 0);
+            } else {
+                student.dueAmount = Math.max(0, (academicSummary.due || 0) + (hostelSummary.due || 0) + (transportSummary.due || 0));
+            }
             student.scholarshipStatus = getScholarshipStatus(student.id, targetStudentYear || student.current_year) || 'not_eligible';
 
             // Calculate previous due: dues from prior academic years (i.e. year < current studentYear / targetStudentYear)

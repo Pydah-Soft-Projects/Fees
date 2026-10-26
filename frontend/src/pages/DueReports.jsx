@@ -572,6 +572,7 @@ const DueReports = () => {
                 const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
                 const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
                 const studType = st.stud_type || st.student_type || st.quota || '—';
+                const batchOverallDue = batchYearsList.reduce((sum, y) => sum + Number(st.yearDues?.[y] || 0), 0);
                 const row = [
                     idx + 1,
                     st.pin_no || '—',
@@ -580,7 +581,7 @@ const DueReports = () => {
                     studType,
                     courseBranch,
                     ...batchYearsList.map(y => Number(st.yearDues?.[y] || 0)),
-                    Number(st.dueAmount || 0)
+                    batchOverallDue
                 ];
                 dataRows.push(row);
             });
@@ -622,7 +623,8 @@ const DueReports = () => {
                 batchYearsList.forEach(y => {
                     sumBatchYears[y] += Number(st.yearDues?.[y] || 0);
                 });
-                sumOverallDue += Number(st.dueAmount || 0);
+                const batchOverallDue = batchYearsList.reduce((sum, y) => sum + Number(st.yearDues?.[y] || 0), 0);
+                sumOverallDue += batchOverallDue;
             });
             totalRow = [
                 "TOTAL", "", "", "", "", "",
@@ -1055,10 +1057,14 @@ const DueReports = () => {
                     ? (student.activeDue || 0)
                     : Math.max(0, (student.activeDue || 0) + previousDue);
 
+                const batchTotalDue = Object.values(sourceYearDues).reduce((sum, d) => sum + Number(d || 0), 0);
+                const dueAmount = reportMode === 'batch' ? batchTotalDue : (student.dueAmount || 0);
+
                 return {
                     ...student,
                     yearDues: sourceYearDues,
                     feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown,
+                    dueAmount,
                     previousDue,
                     activeDue
                 };
@@ -1139,10 +1145,12 @@ const DueReports = () => {
 
             // Without Sch does not change non-eligible students — keep backend term columns (T1/T3 etc.)
             if (excludeScholarship && !hasFeeHeadFilter && !isStudentScholarEligible) {
+                const batchTotalDue = Object.values(breakdown.yearDues || {}).reduce((sum, d) => sum + Number(d || 0), 0);
                 return {
                     ...student,
                     yearDues: breakdown.yearDues,
-                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown
+                    feeHeadYearBreakdown: breakdown.feeHeadYearBreakdown,
+                    dueAmount: reportMode === 'batch' ? batchTotalDue : student.dueAmount
                 };
             }
 
@@ -1244,8 +1252,10 @@ const DueReports = () => {
                 termDues.push(studentTermDues[i] || 0);
             }
 
-            const effectiveTotalFee = hasFeeHeadFilter ? totalFee : student.totalFee;
-            const dueAmount = Math.max(0, effectiveTotalFee - paidAmount - concessionAmount);
+            const batchTotalDue = Object.values(breakdown.yearDues || {}).reduce((sum, d) => sum + Number(d || 0), 0);
+            const dueAmount = reportMode === 'batch'
+                ? batchTotalDue
+                : Math.max(0, (catSums.academic.due || 0) + (catSums.hostel.due || 0) + (catSums.transport.due || 0));
 
             let activeDue = 0;
             [catSums.academic, catSums.hostel, catSums.transport].forEach(catSum => {
@@ -2285,7 +2295,7 @@ const DueReports = () => {
                                                                                                             );
                                                                                                         })}
                                                                                                         <td className="py-2 text-right text-red-600 font-bold">
-                                                                                                            ₹{(student.dueAmount || 0).toLocaleString('en-IN')}
+                                                                                                            ₹{(batchYearsList.reduce((sum, yr) => sum + (student.yearDues?.[yr] || 0), 0)).toLocaleString('en-IN')}
                                                                                                         </td>
                                                                                                     </tr>
                                                                                                 </>
