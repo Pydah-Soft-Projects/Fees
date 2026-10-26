@@ -580,10 +580,13 @@ const DueReports = () => {
                 const studType = st.stud_type || st.student_type || st.quota || '—';
                 const studentCurrentYear = Number(st.current_year || 1);
                 const yearVals = batchYearsList.map(y => {
-                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return 0;
+                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return '-';
                     return Number(st.yearDues?.[y] || 0);
                 });
-                const batchOverallDue = yearVals.reduce((sum, v) => sum + v, 0);
+                const batchOverallDue = batchYearsList.reduce((sum, y) => {
+                    if (restrictToCurrentYear && Number(y) > studentCurrentYear) return sum;
+                    return sum + Number(st.yearDues?.[y] || 0);
+                }, 0);
                 const row = [
                     idx + 1,
                     st.pin_no || '—',
@@ -889,8 +892,14 @@ const DueReports = () => {
                     alignH = 'right';
                     if (c >= 6 && c < 6 + batchYearsList.length) {
                         cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
-                        fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
-                        isBold = Number(rawVal) > 0;
+                        if (rawVal === '-' || rawVal === '—') {
+                            alignH = 'center';
+                            fontColor = '94A3B8';
+                            isBold = false;
+                        } else {
+                            fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
+                            isBold = Number(rawVal) > 0;
+                        }
                     } else {
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '16A34A';
                         isBold = true;
