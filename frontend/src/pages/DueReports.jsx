@@ -538,6 +538,7 @@ const DueReports = () => {
                 "Pin No",
                 "Adm No",
                 "Student Name",
+                "Student Type",
                 "Course / Branch",
                 ...batchYearsList.map(y => `Year ${y} Due`),
                 "Overall Due"
@@ -548,6 +549,7 @@ const DueReports = () => {
                 "Pin No",
                 "Adm No",
                 "Student Name",
+                "Student Type",
                 "Course / Branch",
                 "Total Fee",
                 "Concession",
@@ -569,11 +571,13 @@ const DueReports = () => {
             filteredData.forEach((st, idx) => {
                 const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
                 const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
+                const studType = st.stud_type || st.student_type || st.quota || '—';
                 const row = [
                     idx + 1,
                     st.pin_no || '—',
                     st.admission_number || '—',
                     nameWithSch,
+                    studType,
                     courseBranch,
                     ...batchYearsList.map(y => Number(st.yearDues?.[y] || 0)),
                     Number(st.dueAmount || 0)
@@ -584,6 +588,7 @@ const DueReports = () => {
             filteredData.forEach((st, idx) => {
                 const nameWithSch = st.student_name + (String(st.scholarshipStatus).toLowerCase() === 'eligible' ? ' (Sch)' : '');
                 const courseBranch = [st.course, st.branch].filter(Boolean).join(' - ') || '—';
+                const studType = st.stud_type || st.student_type || st.quota || '—';
                 const termVals = [];
                 for (let i = 0; i < maxTerms; i++) {
                     termVals.push(Number(st.termDues?.[i] || 0));
@@ -593,6 +598,7 @@ const DueReports = () => {
                     st.pin_no || '—',
                     st.admission_number || '—',
                     nameWithSch,
+                    studType,
                     courseBranch,
                     Number(st.totalFee || 0),
                     Number(st.concessionAmount || 0),
@@ -619,7 +625,7 @@ const DueReports = () => {
                 sumOverallDue += Number(st.dueAmount || 0);
             });
             totalRow = [
-                "TOTAL", "", "", "", "",
+                "TOTAL", "", "", "", "", "",
                 ...batchYearsList.map(y => sumBatchYears[y]),
                 sumOverallDue
             ];
@@ -645,7 +651,7 @@ const DueReports = () => {
             });
 
             totalRow = [
-                "TOTAL", "", "", "", "",
+                "TOTAL", "", "", "", "", "",
                 sumTotalFee,
                 sumConcession,
                 sumPaid,
@@ -678,7 +684,7 @@ const DueReports = () => {
             { s: { r: 1, c: 0 }, e: { r: 1, c: totalCols - 1 } },
             { s: { r: 2, c: 0 }, e: { r: 2, c: totalCols - 1 } },
             { s: { r: 3, c: 0 }, e: { r: 3, c: totalCols - 1 } },
-            { s: { r: totalRowIdx, c: 0 }, e: { r: totalRowIdx, c: 4 } },
+            { s: { r: totalRowIdx, c: 0 }, e: { r: totalRowIdx, c: 5 } },
             { s: { r: footerRowIdx, c: 0 }, e: { r: footerRowIdx, c: totalCols - 1 } }
         ];
 
@@ -692,6 +698,7 @@ const DueReports = () => {
                 { wch: 15 }, // Pin No
                 { wch: 15 }, // Adm No
                 { wch: 28 }, // Student Name
+                { wch: 14 }, // Student Type
                 { wch: 22 }, // Course / Branch
                 ...batchYearsList.map(() => ({ wch: 16 })), // Year X Due
                 { wch: 16 }  // Overall Due
@@ -702,6 +709,7 @@ const DueReports = () => {
                 { wch: 15 }, // Pin No
                 { wch: 15 }, // Adm No
                 { wch: 28 }, // Student Name
+                { wch: 14 }, // Student Type
                 { wch: 22 }, // Course / Branch
                 { wch: 14 }, // Total Fee
                 { wch: 13 }, // Concession
@@ -831,35 +839,38 @@ const DueReports = () => {
                     isBold = true;
                     fontColor = '0F172A';
                 } else if (c === 4) {
+                    alignH = 'center';
+                    fontColor = '475569';
+                } else if (c === 5) {
                     alignH = 'left';
                     fontColor = '475569';
                 } else if (!isBatch) {
                     alignH = 'right';
-                    if (c === 5) {
+                    if (c === 6) {
                         fontColor = '334155';
-                    } else if (c === 6) {
+                    } else if (c === 7) {
                         fontColor = Number(rawVal) > 0 ? '7E22CE' : '94A3B8';
                         isBold = Number(rawVal) > 0;
-                    } else if (c === 7) {
+                    } else if (c === 8) {
                         fontColor = Number(rawVal) > 0 ? '16A34A' : '94A3B8';
                         isBold = Number(rawVal) > 0;
-                    } else if (c >= 8 && c < 8 + maxTerms) {
+                    } else if (c >= 9 && c < 9 + maxTerms) {
                         cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
                         isBold = Number(rawVal) > 0;
-                    } else if (c === 8 + maxTerms) {
+                    } else if (c === 9 + maxTerms) {
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
                         isBold = Number(rawVal) > 0;
-                    } else if (c === 9 + maxTerms) {
+                    } else if (c === 10 + maxTerms) {
                         fontColor = Number(rawVal) > 0 ? 'D97706' : '94A3B8';
                         isBold = true;
-                    } else if (c === 10 + maxTerms) {
+                    } else if (c === 11 + maxTerms) {
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '16A34A';
                         isBold = true;
                     }
                 } else {
                     alignH = 'right';
-                    if (c >= 5 && c < 5 + batchYearsList.length) {
+                    if (c >= 6 && c < 6 + batchYearsList.length) {
                         cellBg = sIdx % 2 === 0 ? 'F8FAFC' : 'F1F5F9';
                         fontColor = Number(rawVal) > 0 ? 'DC2626' : '94A3B8';
                         isBold = Number(rawVal) > 0;
