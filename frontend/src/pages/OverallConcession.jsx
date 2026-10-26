@@ -1563,7 +1563,7 @@ const OverallConcession = () => {
         }
         setIsSaving(true); setSuccessMessage(''); setErrorMessage('');
         try {
-            await api.post('/overall-concessions/request', {
+            const res = await api.post('/overall-concessions/request', {
                 admissionNumber: selectedStudent.admission_number,
                 pinNo:           selectedStudent.pin_no,
                 studentName:     selectedStudent.student_name,
@@ -1574,10 +1574,14 @@ const OverallConcession = () => {
                 category:        selectedStudent.stud_type,
                 concessions:     payload
             });
-            setSuccessMessage('Request submitted for approval successfully!');
+            if (res.data?.remarksOnly) {
+                setSuccessMessage('Remarks updated directly on approved concession!');
+            } else {
+                setSuccessMessage('Request submitted for approval successfully!');
+                // update pending badge set only if an actual approval request was created
+                setPendingAdmSet(prev => new Set([...prev, selectedStudent.admission_number]));
+            }
             markFormClean();
-            // update pending badge set
-            setPendingAdmSet(prev => new Set([...prev, selectedStudent.admission_number]));
             setTimeout(() => setSuccessMessage(''), 4000);
         } catch (err) {
             setErrorMessage(err.response?.data?.message || 'Failed to submit request.');

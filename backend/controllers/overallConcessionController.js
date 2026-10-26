@@ -761,6 +761,76 @@ const submitConcessionRequest = async (req, res) => {
             };
         });
 
+        // Find existing APPROVED request for this student
+        const approvedRequest = await OverallConcessionRequest.findOne({
+            admissionNumber,
+            status: 'APPROVED'
+        }).sort({ updatedAt: -1, createdAt: -1 });
+
+        // Check if incoming entries are identical in amounts and fee heads to the approved request
+        if (approvedRequest && Array.isArray(approvedRequest.concessions) && approvedRequest.concessions.length > 0) {
+            const approvedMap = new Map();
+            approvedRequest.concessions.forEach(c => {
+                const key = `${c.feeHeadId}_${c.studentYear}_${c.semester ?? 'null'}`;
+                approvedMap.set(key, {
+                    amount: Number(c.amount ?? c.revisedAmount ?? 0),
+                    concessionType: String(c.concessionType || 'CONCESSION').toUpperCase(),
+                    remarks: c.remarks || ''
+                });
+            });
+
+            const incomingMap = new Map();
+            normalizedEntries.forEach(c => {
+                const key = `${c.feeHeadId}_${c.studentYear}_${c.semester ?? 'null'}`;
+                incomingMap.set(key, {
+                    amount: Number(c.amount ?? 0),
+                    concessionType: String(c.concessionType || 'CONCESSION').toUpperCase(),
+                    remarks: c.remarks || ''
+                });
+            });
+
+            let sameHeadsAndYears = approvedMap.size === incomingMap.size;
+            let amountsIdentical = sameHeadsAndYears;
+
+            if (sameHeadsAndYears) {
+                for (const [key, inc] of incomingMap.entries()) {
+                    const app = approvedMap.get(key);
+                    if (!app || app.amount !== inc.amount || app.concessionType !== inc.concessionType) {
+                        amountsIdentical = false;
+                        break;
+                    }
+                }
+            }
+
+            // If amounts and components are 100% identical, do NOT create a new pending request.
+            // Directly update the remarks and student snapshot on the approved request.
+            if (amountsIdentical) {
+                approvedRequest.concessions = approvedRequest.concessions.map(c => {
+                    const key = `${c.feeHeadId}_${c.studentYear}_${c.semester ?? 'null'}`;
+                    const inc = incomingMap.get(key);
+                    if (inc && inc.remarks !== undefined) {
+                        c.remarks = inc.remarks;
+                    }
+                    return c;
+                });
+                if (remarks) approvedRequest.remarks = remarks;
+                approvedRequest.studentName = snapName || approvedRequest.studentName;
+                approvedRequest.pinNo       = snapPin || approvedRequest.pinNo;
+                approvedRequest.college     = snapCollege || approvedRequest.college;
+                approvedRequest.course      = snapCourse || approvedRequest.course;
+                approvedRequest.branch      = snapBranch || approvedRequest.branch;
+                approvedRequest.batch       = snapBatch || approvedRequest.batch;
+                approvedRequest.category    = studentQuota;
+                await approvedRequest.save();
+
+                return res.status(200).json({
+                    message: 'Remarks updated directly on approved concession (amounts were unchanged).',
+                    request: approvedRequest,
+                    remarksOnly: true
+                });
+            }
+        }
+
         // Find existing PENDING request for this student
         let existingRequest = await OverallConcessionRequest.findOne({
             admissionNumber,
