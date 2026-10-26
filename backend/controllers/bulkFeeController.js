@@ -973,27 +973,33 @@ const processBulkUpload = async (req, res) => {
                     pinNumber: sInfo ? sInfo.pin_no : null, college: sInfo ? sInfo.college : 'Unknown',
                     course: sInfo ? sInfo.course : 'Unknown', branch: sInfo ? sInfo.branch : 'Unknown',
                     batch: sInfo ? sInfo.batch : '2024-2025', category: category,
+                    studentStatus: sInfo && sInfo.student_status ? sInfo.student_status : (category || 'Regular'),
                     dbCurrentYear: dbCurrYr
                 });
             }
             const entry = previewDataMap.get(canonId);
 
-            // Check DB Student Current Year & Detained / Regular status
+            // Check DB Student Current Year & Status (Regular vs Non-Regular e.g. Detained, Discontinued, Completed, etc.)
             const dbCurrentYear = sInfo && sInfo.current_year ? parseYear(sInfo.current_year) : null;
             const dbStatusText = sInfo ? (String(sInfo.student_status || '') + ' ' + String(sInfo.stud_type || '')) : '';
             const excelCategoryText = colMap.CATEGORY !== undefined && row[colMap.CATEGORY] ? String(row[colMap.CATEGORY]) : '';
             const fullStatusText = (dbStatusText + ' ' + String(category || '') + ' ' + excelCategoryText).toLowerCase();
-            const isDetained = fullStatusText.includes('detain') || fullStatusText.includes('det') || fullStatusText.includes('dt') || fullStatusText.includes('d-');
+
+            const rawDbStatus = sInfo && sInfo.student_status ? String(sInfo.student_status).trim().toLowerCase() : '';
+            const hasNonRegularKeyword = /detain|det|dt|d-|discontinu|cancel|absent|complet|drop|left/i.test(fullStatusText);
+            const isNonRegular = (rawDbStatus && rawDbStatus !== 'regular') || hasNonRegularKeyword;
+            const isRegular = !isNonRegular;
 
             const defaultAmount = colMap.AMOUNT !== undefined ? (parseFloat(row[colMap.AMOUNT]) || 0) : 0;
             if (uploadType === 'DUE') {
                 // Year Skip Rules:
-                // 1. Regular students (!isDetained): Skip rows where year >= dbCurrentYear (current and future years).
-                // 2. Detained students (isDetained): Allow current year (year <= dbCurrentYear), but Skip rows where year > dbCurrentYear (greater/future years).
-                const shouldSkipRow = dbCurrentYear ? (isDetained ? (year > dbCurrentYear) : (year >= dbCurrentYear)) : false;
+                // 1. Regular students (isRegular): Skip rows where year >= dbCurrentYear (current and future years).
+                // 2. Non-Regular students (!isRegular, e.g. Detained, Discontinued, Course Completed, etc.):
+                //    Allow current year (year <= dbCurrentYear), and only Skip rows where year > dbCurrentYear (strictly future years).
+                const shouldSkipRow = dbCurrentYear ? (isRegular ? (year >= dbCurrentYear) : (year > dbCurrentYear)) : false;
 
                 if (shouldSkipRow) {
-                    console.log(`[SKIP] ${isDetained ? 'Detained' : 'Regular'} student ${canonId}: Skipped year ${year} demand row (DB Current Year: ${dbCurrentYear})`);
+                    console.log(`[SKIP] ${isRegular ? 'Regular' : 'Non-Regular (' + (rawDbStatus || 'Special') + ')'} student ${canonId}: Skipped year ${year} demand row (DB Current Year: ${dbCurrentYear})`);
                 } else {
                     let matrixFound = false;
                 Object.keys(feeHeadColMap).forEach(headName => {
@@ -1191,9 +1197,15 @@ const processBulkUpload = async (req, res) => {
 
         const previewData = Array.from(previewDataMap.values());
 
-        // --- PHASE 4: COMPARISON DATA ---
         // --- PHASE 4: COMPARISON DATA (FETCH CONTEXT FROM SYSTEM) ---
-        const allAdmNos = previewData.map(d => d.admissionNumber).filter(Boolean);
+        const allAdmNos = previewData.map(d => d.admissionNumber || d.displayId).filter(Boolean);
+        let totalDemandsCount = 0;
+        let newDemandsCount = 0;
+        let existingDemandsCount = 0;
+        let modifiedDemandsCount = 0;
+        let studentsWithNewDemands = 0;
+        let studentsAllExisting = 0;
+
         if (allAdmNos.length > 0) {
             // Build an inclusive list of ID variations for MongoDB lookup
             const queryIds = allAdmNos.reduce((acc, id) => {
@@ -1214,14 +1226,14 @@ const processBulkUpload = async (req, res) => {
 
             existingDemands.forEach(d => {
                 const normId = normalizeId(d.studentId);
-                const key = `${normId}-${d.feeHead}-${d.studentYear}`;
+                const key = `${normId}-${String(d.feeHead)}-${Number(d.studentYear)}`;
                 sysDemandMap[key] = (sysDemandMap[key] || 0) + (Number(d.amount) || 0);
             });
 
             existingPayments.forEach(t => {
                 if (t.transactionType !== 'CREDIT') {
                     const normId = normalizeId(t.studentId);
-                    const key = `${normId}-${t.feeHead}-${t.studentYear}`;
+                    const key = `${normId}-${String(t.feeHead)}-${Number(t.studentYear)}`;
                     sysPaidMap[key] = (sysPaidMap[key] || 0) + (Number(t.amount) || 0);
                 }
             });
@@ -1245,37 +1257,74 @@ const processBulkUpload = async (req, res) => {
             });
 
             previewData.forEach(entry => {
-                if (!entry.admissionNumber) return;
-                const normEntryId = normalizeId(entry.admissionNumber);
+                if (!entry.admissionNumber && !entry.displayId) return;
+                const normEntryId = normalizeId(entry.admissionNumber || entry.displayId);
                 const isPendingActive = isPendingMode === 'true';
+
+                let studentHasNew = false;
+                let studentHasModified = false;
 
                 if (uploadType === 'PAYMENT') {
                     // For PAYMENT upload, preview displays uploaded transactions in entry.payments.
                 }
 
-                entry.demands.forEach(d => {
-                    const key = `${normEntryId}-${d.headId}-${d.year}`;
-                    let totalFee = sysDemandMap[key] || 0;
+                if (entry.demands && entry.demands.length > 0) {
+                    entry.demands.forEach(d => {
+                        totalDemandsCount++;
+                        const key = `${normEntryId}-${String(d.headId)}-${Number(d.year)}`;
+                        const existsInDb = sysDemandMap[key] !== undefined;
+                        const existingAmount = existsInDb ? sysDemandMap[key] : null;
 
-                    // Fallback to base FeeStructure if no allotted demand in SQL
-                    if (totalFee === 0) {
-                        const baseKey = `${entry.college}-${entry.course}-${entry.branch}-${entry.batch}-${entry.category}-${d.year}-${d.headId}`;
-                        totalFee = baseFeeMap[baseKey] || 0;
-                    }
+                        if (!existsInDb) {
+                            d.uploadStatus = 'NEW';
+                            newDemandsCount++;
+                            studentHasNew = true;
+                        } else if (Math.abs(Number(existingAmount) - Number(d.amount)) < 0.01) {
+                            d.uploadStatus = 'EXISTING';
+                            existingDemandsCount++;
+                        } else {
+                            d.uploadStatus = 'MODIFIED';
+                            d.previousAmount = existingAmount;
+                            modifiedDemandsCount++;
+                            studentHasModified = true;
+                        }
 
-                    const paidInSys = sysPaidMap[key] || 0;
-                    const sysDue = totalFee - paidInSys;
+                        let totalFee = sysDemandMap[key] || 0;
 
-                    d.allotted = totalFee;
+                        // Fallback to base FeeStructure if no allotted demand in SQL
+                        if (totalFee === 0) {
+                            const baseKey = `${entry.college}-${entry.course}-${entry.branch}-${entry.batch}-${entry.category}-${d.year}-${d.headId}`;
+                            totalFee = baseFeeMap[baseKey] || 0;
+                        }
 
-                    // Populate meta for UI
-                    d.meta = {
-                        totalDemand: totalFee,
-                        totalPaid: paidInSys,
-                        systemDue: sysDue,
-                        pendingAmount: d.amount
-                    };
-                });
+                        const paidInSys = sysPaidMap[key] || 0;
+                        const sysDue = totalFee - paidInSys;
+
+                        d.allotted = totalFee;
+
+                        // Populate meta for UI
+                        d.meta = {
+                            totalDemand: totalFee,
+                            totalPaid: paidInSys,
+                            systemDue: sysDue,
+                            pendingAmount: d.amount,
+                            uploadStatus: d.uploadStatus,
+                            existingAmount: existingAmount
+                        };
+                    });
+                }
+
+                if (studentHasNew) {
+                    studentsWithNewDemands++;
+                    entry.uploadStatus = 'NEW';
+                } else if (studentHasModified) {
+                    entry.uploadStatus = 'MODIFIED';
+                } else {
+                    studentsAllExisting++;
+                    entry.uploadStatus = 'EXISTING';
+                }
+                entry.hasNewDemands = studentHasNew;
+                entry.hasModifiedDemands = studentHasModified;
             });
 
             // Check missing previous years for Transport Fee zeroing if StudentFee demand exists in DB
@@ -1349,6 +1398,14 @@ const processBulkUpload = async (req, res) => {
             message: `Parsed ${processedCount} records (${skippedRows} skipped).`,
             count: previewData.length, totalRows: rawData.length - 1, skippedRows: skippedRows,
             data: previewData, feeHeads: Array.from(activeFeeHeads),
+            statusSummary: {
+                totalDemands: totalDemandsCount,
+                newDemands: newDemandsCount,
+                existingDemands: existingDemandsCount,
+                modifiedDemands: modifiedDemandsCount,
+                studentsWithNewDemands: studentsWithNewDemands,
+                studentsAllExisting: studentsAllExisting
+            },
             mappingSummary: {
                 mapped: mappedFeeHeads,
                 unmapped: unmappedColumns,
@@ -1367,10 +1424,12 @@ const processBulkUpload = async (req, res) => {
 // @route POST /api/bulk-fee/save
 const saveBulkData = async (req, res) => {
     console.log('API: saveBulkData called');
-    const { students, isPendingMode } = req.body;
+    const { students, isPendingMode, onlyNewDemands } = req.body;
     const user = req.user ? req.user.username : 'system';
 
     const pendingActive = isPendingMode === true || isPendingMode === 'true';
+    let newDemandsSaved = 0;
+    let existingDemandsUpdated = 0;
 
     if (!students || !Array.isArray(students) || students.length === 0) {
         return res.status(400).json({ message: 'No student data provided' });
@@ -1595,11 +1654,20 @@ const saveBulkData = async (req, res) => {
             // If it does not exist, INSERT it as a new demand.
             if (stud.demands && !pendingActive) {
                 stud.demands.forEach(d => {
+                    if (onlyNewDemands && d.uploadStatus && d.uploadStatus !== 'NEW') {
+                        return; // Skip already existing demands if onlyNewDemands mode is active
+                    }
+
                     const dYear = Number(d.year);
                     const headObjId = mongoose.Types.ObjectId.isValid(d.headId) ? new mongoose.Types.ObjectId(d.headId) : d.headId;
                     const isTransportHead = d.headName ? d.headName.toLowerCase().includes('transport') : false;
 
                     if (d.amount > 0) {
+                        if (d.uploadStatus === 'NEW') {
+                            newDemandsSaved++;
+                        } else {
+                            existingDemandsUpdated++;
+                        }
                         demandBulkOps.push({
                             updateOne: {
                                 filter: {
@@ -1774,7 +1842,9 @@ const saveBulkData = async (req, res) => {
 
         console.log('Bulk save completed successfully.');
         res.json({
-            message: `Processed ${students.length} students. Saved Demands & Payments.`,
+            message: `Processed ${students.length} students. Saved ${demandBulkOps.length} Demands (${newDemandsSaved} new inserted, ${existingDemandsUpdated} updated).`,
+            newDemandsCount: newDemandsSaved,
+            existingDemandsCount: existingDemandsUpdated,
             unresolvedCount: unresolvedStudents.length,
             unresolvedSample: unresolvedStudents.slice(0, 5)
         });

@@ -1379,7 +1379,7 @@ const getDueReports = async (req, res) => {
         const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
 
         // 1. Build SQL Query for Students
-        let sqlQuery = `SELECT id, admission_number, student_name, course, branch, current_year, student_mobile, pin_no, college, stud_type, batch, current_semester, is_scholar_applicable FROM students WHERE 1=1`;
+        let sqlQuery = `SELECT id, admission_number, student_name, course, branch, current_year, student_mobile, pin_no, college, stud_type, batch, current_semester, is_scholar_applicable, student_status FROM students WHERE 1=1`;
         const params = [];
 
         // Filter by student status

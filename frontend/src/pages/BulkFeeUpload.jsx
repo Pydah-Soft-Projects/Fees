@@ -21,6 +21,9 @@ const BulkFeeUpload = () => {
     const [feeHeads, setFeeHeads] = useState([]); // List of dynamic columns from server
     const [mappingSummary, setMappingSummary] = useState(null);
     const [showMappingModal, setShowMappingModal] = useState(false);
+    const [statusSummary, setStatusSummary] = useState(null);
+    const [filterStatus, setFilterStatus] = useState('ALL'); // 'ALL' | 'NEW_ONLY' | 'EXISTING_ONLY'
+    const [onlyNewDemands, setOnlyNewDemands] = useState(false);
 
     const handleFileChange = (e) => {
         setFile(e.target.files[0]);
@@ -31,6 +34,9 @@ const BulkFeeUpload = () => {
         setError('');
         setMappingSummary(null);
         setShowMappingModal(false);
+        setStatusSummary(null);
+        setFilterStatus('ALL');
+        setOnlyNewDemands(false);
     };
 
     const handleDownloadMappingExcel = () => {
@@ -127,11 +133,13 @@ const BulkFeeUpload = () => {
                 setSelectedIds([]);
                 setMappingSummary(null);
                 setShowMappingModal(false);
+                setStatusSummary(null);
             } else {
                 setPreviewData(data);
                 setFeeHeads(resHeads);
                 setSelectedIds(data.map((_, i) => i));
                 setMappingSummary(response.data.mappingSummary || null);
+                setStatusSummary(response.data.statusSummary || null);
                 if (response.data.mappingSummary) {
                     setShowMappingModal(true);
                 }
@@ -145,12 +153,29 @@ const BulkFeeUpload = () => {
         }
     };
 
+    // Filter rows based on status
+    const filteredRows = previewData
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => {
+            if (filterStatus === 'NEW_ONLY') return row.hasNewDemands;
+            if (filterStatus === 'EXISTING_ONLY') return !row.hasNewDemands;
+            return true;
+        });
+
     const handleSelectAll = () => {
-        if (selectedIds.length === previewData.length) {
-            setSelectedIds([]);
+        const visibleIndices = filteredRows.map(item => item.index);
+        const allVisibleSelected = visibleIndices.length > 0 && visibleIndices.every(id => selectedIds.includes(id));
+        if (allVisibleSelected) {
+            setSelectedIds(selectedIds.filter(id => !visibleIndices.includes(id)));
         } else {
-            setSelectedIds(previewData.map((_, i) => i));
+            setSelectedIds([...new Set([...selectedIds, ...visibleIndices])]);
         }
+    };
+
+    const handleSelectOnlyNew = () => {
+        const newIndices = previewData.map((r, i) => (r.hasNewDemands ? i : null)).filter(i => i !== null);
+        setSelectedIds(newIndices);
+        setOnlyNewDemands(true);
     };
 
     const handleSelectRow = (index) => {
@@ -180,13 +205,17 @@ const BulkFeeUpload = () => {
             const response = await api.post(`/bulk-fee/save`, {
                 students: studentsToSave,
                 uploadType: uploadType,
-                isPendingMode: false
+                isPendingMode: false,
+                onlyNewDemands: onlyNewDemands
             });
             setMessage(response.data.message);
             setFile(null);
             setPreviewData([]);
             setSelectedIds([]);
             setExpandedRows({});
+            setStatusSummary(null);
+            setFilterStatus('ALL');
+            setOnlyNewDemands(false);
         } catch (err) {
             console.error(err);
             setError(err.response?.data?.message || 'Error saving data');
@@ -324,7 +353,7 @@ const BulkFeeUpload = () => {
                 {/* Preview Table */}
                 {previewData.length > 0 && (
                     <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                        <div className="p-4 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gray-50">
                             <div>
                                 <h3 className="font-bold text-gray-800">Preview ({uploadType} Mode) — {previewData.length} records</h3>
                                 <p className="text-xs text-gray-500 mt-0.5">
@@ -333,15 +362,82 @@ const BulkFeeUpload = () => {
                                         ₹{previewData.reduce((acc, row) => acc + (uploadType === 'PAYMENT' ? (row.totalPaid || 0) : (row.totalDemand || 0)), 0).toLocaleString('en-IN')}
                                     </span>
                                 </p>
+                                {statusSummary && uploadType === 'DUE' && (
+                                    <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
+                                        <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300 flex items-center gap-1.5 shadow-sm">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                                            {statusSummary.newDemands || 0} New Demands Detected ({statusSummary.studentsWithNewDemands || 0} Students)
+                                        </span>
+                                        <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-700 font-medium border border-gray-300">
+                                            {statusSummary.existingDemands || 0} Already in System
+                                        </span>
+                                        {statusSummary.modifiedDemands > 0 && (
+                                            <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium border border-amber-300">
+                                                {statusSummary.modifiedDemands} Modified Amounts
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                            <button
-                                onClick={handleSave}
-                                disabled={saving || selectedIds.length === 0}
-                                className={`flex items-center gap-2 px-6 py-2 rounded font-bold text-white shadow-md transition ${saving || selectedIds.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
-                            >
-                                {saving ? 'Saving...' : <><Save size={18} /> Confirm Upload ({selectedIds.length})</>}
-                            </button>
+                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 w-full md:w-auto">
+                                {uploadType === 'DUE' && (
+                                    <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer select-none bg-white px-3 py-1.5 rounded border border-gray-300 shadow-sm hover:bg-gray-50">
+                                        <input
+                                            type="checkbox"
+                                            checked={onlyNewDemands}
+                                            onChange={(e) => setOnlyNewDemands(e.target.checked)}
+                                            className="rounded text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span>Insert <b>New Dues Only</b> (Skip existing)</span>
+                                    </label>
+                                )}
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving || selectedIds.length === 0}
+                                    className={`flex items-center gap-2 px-6 py-2 rounded font-bold text-white shadow-md transition ${saving || selectedIds.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                                >
+                                    {saving ? 'Saving...' : <><Save size={18} /> Confirm Upload ({selectedIds.length})</>}
+                                </button>
+                            </div>
                         </div>
+
+                        {/* Filter Tabs & Quick Actions */}
+                        {uploadType === 'DUE' && (
+                            <div className="px-4 py-2 border-b bg-gray-50/70 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="text-gray-500 font-medium mr-1">Filter:</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterStatus('ALL')}
+                                        className={`px-3 py-1 rounded font-medium border transition ${filterStatus === 'ALL' ? 'bg-blue-600 text-white border-blue-600 shadow-xs' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`}
+                                    >
+                                        All ({previewData.length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterStatus('NEW_ONLY')}
+                                        className={`px-3 py-1 rounded font-medium border transition flex items-center gap-1.5 ${filterStatus === 'NEW_ONLY' ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' : 'bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50'}`}
+                                    >
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                        New Dues Only ({previewData.filter(r => r.hasNewDemands).length})
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterStatus('EXISTING_ONLY')}
+                                        className={`px-3 py-1 rounded font-medium border transition ${filterStatus === 'EXISTING_ONLY' ? 'bg-gray-700 text-white border-gray-700 shadow-xs' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-100'}`}
+                                    >
+                                        Already Uploaded ({previewData.filter(r => !r.hasNewDemands).length})
+                                    </button>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleSelectOnlyNew}
+                                    className="text-xs text-blue-600 hover:text-blue-800 font-semibold hover:underline flex items-center gap-1"
+                                >
+                                    ✓ Select Only Students with New Dues
+                                </button>
+                            </div>
+                        )}
 
                         <div className="overflow-auto flex-1">
                             <table className="w-full text-left text-sm whitespace-nowrap">
@@ -349,18 +445,18 @@ const BulkFeeUpload = () => {
                                     <tr>
                                         <th className="p-3 w-10 text-center">
                                             <button onClick={handleSelectAll} className="text-gray-600 hover:text-blue-600">
-                                                {selectedIds.length === previewData.length ? <CheckSquare size={18} /> : <Square size={18} />}
+                                                {filteredRows.length > 0 && filteredRows.every(item => selectedIds.includes(item.index)) ? <CheckSquare size={18} /> : <Square size={18} />}
                                             </button>
                                         </th>
                                         <th className="p-3 font-semibold text-gray-600">Student Name</th>
                                         <th className="p-3 font-semibold text-gray-600">Pin / Admission</th>
                                         <th className="p-3 font-semibold text-gray-600">Fee Heads</th>
                                         <th className="p-3 font-semibold text-gray-600 text-right">{uploadType === 'PAYMENT' ? 'Total Paid' : 'Total Demand'}</th>
-                                        <th className="p-3 font-semibold text-gray-600 text-center">Batch Match</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-center">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y">
-                                    {previewData.map((row, index) => (
+                                    {filteredRows.map(({ row, index }) => (
                                         <React.Fragment key={index}>
                                             <tr className={`hover:bg-blue-50 transition cursor-pointer ${selectedIds.includes(index) ? 'bg-blue-50/50' : 'bg-white'}`} onClick={() => toggleRow(index)}>
                                                 <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
@@ -380,7 +476,24 @@ const BulkFeeUpload = () => {
                                                     ₹{Number(uploadType === 'PAYMENT' ? (row.totalPaid || 0) : (row.totalDemand || 0)).toLocaleString('en-IN')}
                                                 </td>
                                                 <td className="p-3 text-center">
-                                                    {row.admissionNumber ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Found</span> : <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Not Found</span>}
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        {row.admissionNumber ? (
+                                                            <span className="text-[11px] bg-green-100 text-green-700 px-2 py-0.5 rounded font-medium">Found</span>
+                                                        ) : (
+                                                            <span className="text-[11px] bg-red-100 text-red-700 px-2 py-0.5 rounded font-medium">Not Found</span>
+                                                        )}
+                                                        {uploadType === 'DUE' && (
+                                                            row.hasNewDemands ? (
+                                                                <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold shadow-xs tracking-wide">
+                                                                    NEW DUE
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
+                                                                    EXISTS
+                                                                </span>
+                                                            )
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                             {expandedRows[index] && (
@@ -391,7 +504,14 @@ const BulkFeeUpload = () => {
                                                                 <span className="text-xs font-bold text-gray-500 uppercase">
                                                                     {uploadType === 'PAYMENT' ? 'Uploaded Payment Transactions' : 'Uploaded Fee Demands'}
                                                                 </span>
-                                                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{row.category || 'Regular'}</span>
+                                                                <div className="flex items-center gap-2">
+                                                                    {row.studentStatus && (
+                                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
+                                                                            Status: {row.studentStatus}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{row.category || 'Regular'}</span>
+                                                                </div>
                                                             </div>
                                                             <table className="w-full text-sm text-left">
                                                                 <thead className="bg-gray-100 text-xs text-gray-500 uppercase border-b">
@@ -412,6 +532,7 @@ const BulkFeeUpload = () => {
                                                                             <th className="px-4 py-2">Year</th>
                                                                             <th className="px-4 py-2">Sem</th>
                                                                             <th className="px-4 py-2 text-right">Demand Amount</th>
+                                                                            <th className="px-4 py-2 text-center">Upload Status</th>
                                                                             <th className="px-4 py-2">Remarks</th>
                                                                         </tr>
                                                                     )}
@@ -453,19 +574,34 @@ const BulkFeeUpload = () => {
                                                                     ) : (
                                                                         row.demands && row.demands.length > 0 ? (
                                                                             row.demands.map((d, i) => (
-                                                                                <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                                                                                <tr key={i} className={`border-b last:border-0 hover:bg-gray-50 ${d.uploadStatus === 'NEW' ? 'bg-emerald-50/40' : ''}`}>
                                                                                     <td className="px-4 py-2 font-medium text-gray-800">{d.headName}</td>
                                                                                     <td className="px-4 py-2">{d.year}</td>
                                                                                     <td className="px-4 py-2">{d.semester || 1}</td>
                                                                                     <td className="px-4 py-2 text-right font-mono font-bold text-blue-700">
                                                                                         ₹{Number(d.amount || 0).toLocaleString('en-IN')}
                                                                                     </td>
+                                                                                    <td className="px-4 py-2 text-center">
+                                                                                        {d.uploadStatus === 'NEW' ? (
+                                                                                            <span className="px-2 py-0.5 rounded-full font-bold text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                                                                ✓ NEW
+                                                                                            </span>
+                                                                                        ) : d.uploadStatus === 'MODIFIED' ? (
+                                                                                            <span className="px-2 py-0.5 rounded-full font-bold text-[11px] bg-amber-100 text-amber-800 border border-amber-300" title={`Existing in DB: ₹${d.previousAmount || 0}`}>
+                                                                                                MODIFIED
+                                                                                            </span>
+                                                                                        ) : (
+                                                                                            <span className="px-2 py-0.5 rounded-full font-medium text-[11px] bg-gray-100 text-gray-600 border border-gray-200">
+                                                                                                ALREADY IN SYSTEM
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </td>
                                                                                     <td className="px-4 py-2 text-xs text-gray-500">{d.remarks || '-'}</td>
                                                                                 </tr>
                                                                             ))
                                                                         ) : (
                                                                             <tr>
-                                                                                <td colSpan={5} className="px-4 py-3 text-center text-xs text-gray-500 italic">No fee demands parsed for this student.</td>
+                                                                                <td colSpan={6} className="px-4 py-3 text-center text-xs text-gray-500 italic">No fee demands parsed for this student.</td>
                                                                             </tr>
                                                                         )
                                                                     )}
