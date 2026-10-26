@@ -450,6 +450,7 @@ const BulkFeeUpload = () => {
                                         </th>
                                         <th className="p-3 font-semibold text-gray-600">Student Name</th>
                                         <th className="p-3 font-semibold text-gray-600">Pin / Admission</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-center">Student Status</th>
                                         <th className="p-3 font-semibold text-gray-600">Fee Heads</th>
                                         <th className="p-3 font-semibold text-gray-600 text-right">{uploadType === 'PAYMENT' ? 'Total Paid' : 'Total Demand'}</th>
                                         <th className="p-3 font-semibold text-gray-600 text-center">Status</th>
@@ -466,6 +467,21 @@ const BulkFeeUpload = () => {
                                                 </td>
                                                 <td className="p-3 font-medium text-gray-800">{row.studentName}</td>
                                                 <td className="p-3 font-mono text-gray-600">{row.pinNumber || row.admissionNumber || row.displayId}</td>
+                                                <td className="p-3 text-center">
+                                                    {row.studentStatus ? (
+                                                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${
+                                                            row.studentStatus === 'Regular'
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                                                : row.studentStatus === 'Detained'
+                                                                ? 'bg-red-50 text-red-700 border-red-200'
+                                                                : 'bg-purple-50 text-purple-700 border-purple-200'
+                                                        }`}>
+                                                            {row.studentStatus}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs">-</span>
+                                                    )}
+                                                </td>
                                                 <td className="p-3 italic text-gray-500 text-xs truncate max-w-[200px]" title={uploadType === 'PAYMENT' ? row.payments?.map(p => p.headName).join(', ') : row.demands?.map(d => d.headName).join(', ')}>
                                                     {uploadType === 'PAYMENT'
                                                         ? (row.payments?.map(p => p.headName).filter((v, i, a) => a.indexOf(v) === i).join(', ') || '-')
@@ -498,18 +514,13 @@ const BulkFeeUpload = () => {
                                             </tr>
                                             {expandedRows[index] && (
                                                 <tr className="bg-gray-50">
-                                                    <td colSpan={6} className="p-4 border-b inner-shadow">
+                                                    <td colSpan={7} className="p-4 border-b inner-shadow">
                                                         <div className="bg-white border rounded-md shadow-sm overflow-hidden max-w-4xl mx-auto">
                                                             <div className="p-3 bg-gray-50 border-b flex justify-between items-center">
                                                                 <span className="text-xs font-bold text-gray-500 uppercase">
                                                                     {uploadType === 'PAYMENT' ? 'Uploaded Payment Transactions' : 'Uploaded Fee Demands'}
                                                                 </span>
                                                                 <div className="flex items-center gap-2">
-                                                                    {row.studentStatus && (
-                                                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">
-                                                                            Status: {row.studentStatus}
-                                                                        </span>
-                                                                    )}
                                                                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">{row.category || 'Regular'}</span>
                                                                 </div>
                                                             </div>
