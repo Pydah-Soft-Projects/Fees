@@ -419,6 +419,7 @@ const DueReports = () => {
                 dueAmount: Number(s.dueAmount || 0),
                 activeDue: Number(s.activeDue || 0),
                 concessionAmount: Number(s.concessionAmount || 0),
+                previousDue: Number(s.previousDue || 0),
                 termDues: Array.isArray(s.termDues) ? s.termDues.map((v) => Number(v || 0)) : [],
                 termDueDates: Array.isArray(s.termDueDates) ? s.termDueDates : [],
                 yearDues: s.yearDues || {},
@@ -467,9 +468,11 @@ const DueReports = () => {
                     summary: {
                         totalStudents: printReportData.length,
                         totalFee: printReportData.reduce((sum, s) => sum + Number(s.totalFee || 0), 0),
+                        totalConcession: printReportData.reduce((sum, s) => sum + Number(s.concessionAmount || 0), 0),
                         totalCollected: printReportData.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0),
-                        totalDue: printReportData.reduce((sum, s) => sum + Number(s.dueAmount || 0), 0),
+                        totalPreviousDue: printReportData.reduce((sum, s) => sum + Number(s.previousDue || 0), 0),
                         totalActiveDue: printReportData.reduce((sum, s) => sum + Number(s.activeDue || 0), 0),
+                        totalDue: printReportData.reduce((sum, s) => sum + Number(s.dueAmount || 0), 0),
                     }
                 }
             });
@@ -491,12 +494,23 @@ const DueReports = () => {
                     type: 'individual',
                     reportMode,
                     batchYearsList,
+                    maxTerms,
+                    termHeaderDates,
+                    filters: {
+                        college: student.college || filters.college || '',
+                        course: student.course || filters.course || '',
+                        branch: student.branch || filters.branch || '',
+                        year: student.current_year || student.year || filters.year || '',
+                        batch: student.batch || filters.batch || '',
+                        studentStatus: student.student_status || student.studentStatus || '',
+                        quota: student.stud_type || student.quota || ''
+                    },
                     student: {
                         ...student,
                         college: student.college || filters.college || '',
                         course: student.course || filters.course || '',
                         branch: student.branch || filters.branch || '',
-                        year: student.year || filters.year || '',
+                        year: student.current_year || student.year || filters.year || '',
                         batch: student.batch || filters.batch || '',
                         yearDues: student.yearDues || {},
                         feeHeadYearBreakdown: student.feeHeadYearBreakdown || []
@@ -1306,9 +1320,6 @@ const DueReports = () => {
             }
 
             const batchTotalDue = Object.values(breakdown.yearDues || {}).reduce((sum, d) => sum + Number(d || 0), 0);
-            const dueAmount = reportMode === 'batch'
-                ? batchTotalDue
-                : Math.max(0, (catSums.academic.due || 0) + (catSums.hostel.due || 0) + (catSums.transport.due || 0));
 
             let activeDue = 0;
             [catSums.academic, catSums.hostel, catSums.transport].forEach(catSum => {
@@ -1341,6 +1352,11 @@ const DueReports = () => {
             const previousDue = Math.max(0, prevDueCalc);
             const totalActiveDue = Math.max(0, activeDue + previousDue);
 
+            const termsSum = termDues.reduce((a, b) => a + Number(b || 0), 0);
+            const dueAmount = reportMode === 'batch'
+                ? batchTotalDue
+                : Math.max(0, previousDue + termsSum);
+
             const finalizeCategoryClient = (summary) => {
                 if (summary.total === 0 && summary.paid === 0 && summary.concession === 0 && summary.due === 0) {
                     return null;
@@ -1360,6 +1376,22 @@ const DueReports = () => {
                 hostel: finalizeCategoryClient(catSums.hostel),
                 transport: finalizeCategoryClient(catSums.transport)
             };
+            ['academic', 'hostel', 'transport'].forEach(catKey => {
+                const origCat = student.groupedFeeDetails?.[catKey];
+                const prev = origCat?.previousDue || 0;
+                if (rebuiltGroupedFeeDetails[catKey]) {
+                    rebuiltGroupedFeeDetails[catKey].previousDue = prev;
+                } else if (prev > 0) {
+                    rebuiltGroupedFeeDetails[catKey] = {
+                        total: 0,
+                        paid: 0,
+                        concession: 0,
+                        due: 0,
+                        previousDue: prev,
+                        terms: []
+                    };
+                }
+            });
 
             const feeDetailsArray = hasFeeHeadFilter
                 ? Object.entries(feeDetailsMap).map(([headId, detail]) => ({
@@ -1929,14 +1961,14 @@ const DueReports = () => {
 
                         {/* Results Table */}
                         <div className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden flex flex-col min-h-[500px]">
-                            <div className="overflow-x-auto flex-1">
+                            <div className="overflow-auto flex-1 max-h-[calc(100vh-240px)] min-h-[420px]">
                                 <table className="w-full text-left border-collapse text-xs">
-                                    <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10 text-gray-600 font-semibold">
+                                    <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-20 text-gray-600 font-semibold shadow-xs">
                                         {reportMode === 'batch' ? (
                                             <tr>
-                                                <th className="p-2 w-10 text-center">#</th>
+                                                <th className="p-2 w-10 text-center sticky top-0 bg-gray-50 z-20">#</th>
                                                 <th 
-                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('pin_no');
@@ -1948,7 +1980,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'admission_number' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('admission_number');
@@ -1960,7 +1992,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[180px]"
+                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[180px] sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'student_name' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('student_name');
@@ -1971,13 +2003,13 @@ const DueReports = () => {
                                                         Name {sortField === 'student_name' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
-                                                <th className="p-2 min-w-[140px] text-gray-600 font-semibold">
+                                                <th className="p-2 min-w-[140px] text-gray-600 font-semibold sticky top-0 bg-gray-50 z-20">
                                                     Course / Branch
                                                 </th>
                                                 {batchYearsList.map(yr => (
                                                     <th 
                                                         key={yr}
-                                                        className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition bg-blue-50/15 min-w-[105px]"
+                                                        className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition bg-blue-50/50 bg-gray-50 min-w-[105px] sticky top-0 z-20"
                                                         onClick={() => {
                                                             const sKey = `year_${yr}`;
                                                             const dir = (sortField === sKey && sortDir === 'asc') ? 'desc' : 'asc';
@@ -1991,7 +2023,7 @@ const DueReports = () => {
                                                     </th>
                                                 ))}
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition min-w-[110px]"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition min-w-[110px] sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'dueAmount' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('dueAmount');
@@ -2002,13 +2034,13 @@ const DueReports = () => {
                                                         Overall Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
-                                                <th className="p-2 text-center w-16">Action</th>
+                                                <th className="p-2 text-center w-16 sticky top-0 bg-gray-50 z-20">Action</th>
                                             </tr>
                                         ) : (
                                             <tr>
-                                                <th className="p-2 w-10 text-center">#</th>
+                                                <th className="p-2 w-10 text-center sticky top-0 bg-gray-50 z-20">#</th>
                                                 <th 
-                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-32 min-w-[130px] cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'pin_no' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('pin_no');
@@ -2020,7 +2052,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 w-20 cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'admission_number' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('admission_number');
@@ -2032,7 +2064,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[200px]"
+                                                    className="p-2 cursor-pointer select-none hover:bg-gray-100 transition min-w-[200px] sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'student_name' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('student_name');
@@ -2044,7 +2076,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'totalFee' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('totalFee');
@@ -2056,7 +2088,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'concessionAmount' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('concessionAmount');
@@ -2068,7 +2100,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'paidAmount' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('paidAmount');
@@ -2081,7 +2113,7 @@ const DueReports = () => {
                                                 </th>
                                                 {/* Dynamic Term Headers */}
                                                 {Array.from({ length: maxTerms }).map((_, i) => (
-                                                    <th key={i} className="p-2 text-right text-gray-500 font-semibold bg-blue-50/15 w-28">
+                                                    <th key={i} className="p-2 text-right text-gray-500 font-semibold bg-blue-50/50 bg-gray-50 w-28 sticky top-0 z-20">
                                                         <div>T{i + 1} Due</div>
                                                         {termHeaderDates[i] && (
                                                             <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
@@ -2089,7 +2121,7 @@ const DueReports = () => {
                                                     </th>
                                                 ))}
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'previousDue' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('previousDue');
@@ -2101,7 +2133,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'activeDue' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('activeDue');
@@ -2113,7 +2145,7 @@ const DueReports = () => {
                                                     </div>
                                                 </th>
                                                 <th 
-                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition"
+                                                    className="p-2 text-right cursor-pointer select-none hover:bg-gray-100 transition sticky top-0 bg-gray-50 z-20"
                                                     onClick={() => {
                                                         const dir = (sortField === 'dueAmount' && sortDir === 'asc') ? 'desc' : 'asc';
                                                         setSortField('dueAmount');
@@ -2124,7 +2156,7 @@ const DueReports = () => {
                                                         Due {sortField === 'dueAmount' && (sortDir === 'asc' ? '▲' : '▼')}
                                                     </div>
                                                 </th>
-                                                <th className="p-2 text-center w-16">Action</th>
+                                                <th className="p-2 text-center w-16 sticky top-0 bg-gray-50 z-20">Action</th>
                                             </tr>
                                         )}
                                     </thead>
@@ -2293,184 +2325,187 @@ const DueReports = () => {
                                                             </td>
                                                         </tr>
                                                         {isExpanded && (
-                                                            <tr className="bg-gray-50">
-                                                                <td colSpan={totalColSpan} className="p-4 border-b border-gray-200">
-                                                                    <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-                                                                        {reportMode === 'batch' ? (
+                                                            <>
+                                                                {reportMode === 'batch' ? (
+                                                                    (() => {
+                                                                        const breakdowns = (student.feeHeadYearBreakdown || []).filter(fh => (fh.totalDue || 0) > 0 || batchYearsList.some(yr => (fh.yearDues?.[yr] || 0) > 0));
+                                                                        if (breakdowns.length === 0) {
+                                                                            return (
+                                                                                <tr className="bg-blue-50/15 border-b border-gray-100">
+                                                                                    <td colSpan={totalColSpan} className="text-center py-2.5 text-xs text-gray-400 italic">
+                                                                                        No outstanding fee head dues found.
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        }
+                                                                        return (
                                                                             <>
-                                                                                <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center justify-between">
-                                                                                    <span>Fee Head Wise Year Dues Breakdown</span>
-                                                                                    <span className="text-gray-400 font-normal">Student: {student.student_name} ({student.admission_number})</span>
-                                                                                </div>
-                                                                                <table className="w-full text-xs text-left border-collapse">
-                                                                                    <thead>
-                                                                                        <tr className="text-gray-500 border-b border-gray-200 text-[10px] uppercase font-bold">
-                                                                                            <th className="pb-2">Fee Head</th>
-                                                                                            {batchYearsList.map(yr => (
-                                                                                                <th key={yr} className="pb-2 text-right bg-blue-50/15 w-28">
-                                                                                                    Year {yr} Due
-                                                                                                </th>
-                                                                                            ))}
-                                                                                            <th className="pb-2 text-right w-32">Total Due</th>
-                                                                                        </tr>
-                                                                                    </thead>
-                                                                                    <tbody className="divide-y divide-gray-100">
-                                                                                        {(() => {
-                                                                                            const breakdowns = (student.feeHeadYearBreakdown || []).filter(fh => (fh.totalDue || 0) > 0 || batchYearsList.some(yr => (fh.yearDues?.[yr] || 0) > 0));
-                                                                                            if (breakdowns.length === 0) {
-                                                                                                return (
-                                                                                                    <tr>
-                                                                                                        <td colSpan={2 + batchYearsList.length} className="text-center py-4 text-gray-400 italic">
-                                                                                                            No outstanding fee head dues found.
-                                                                                                        </td>
-                                                                                                    </tr>
-                                                                                                );
-                                                                                            }
+                                                                                <tr className="bg-slate-100 text-gray-600 text-xs font-semibold border-t-2 border-b border-blue-200">
+                                                                                    <th className="p-2 text-center text-blue-600 font-semibold">↳</th>
+                                                                                    <th colSpan={4} className="p-2 text-left pl-3 text-gray-700 font-semibold">Fee Head</th>
+                                                                                    {batchYearsList.map(yr => (
+                                                                                        <th key={yr} className="p-2 text-right text-gray-700 font-semibold bg-blue-100/40">
+                                                                                            Year {yr} Due
+                                                                                        </th>
+                                                                                    ))}
+                                                                                    <th className="p-2 text-right text-gray-700 font-semibold">Overall Due</th>
+                                                                                    <th className="p-2"></th>
+                                                                                </tr>
+                                                                                {breakdowns.map((fh, fIdx) => (
+                                                                                    <tr key={fh.headId || fIdx} className="bg-blue-50/20 hover:bg-blue-50/35 border-b border-dashed border-gray-200 text-xs transition">
+                                                                                        <td className="p-2 text-center text-blue-500 font-bold">↳</td>
+                                                                                        <td colSpan={4} className="p-2 font-semibold text-gray-700 pl-3">
+                                                                                            {fh.headName} {fh.headCode ? <span className="text-gray-400 font-normal">({fh.headCode})</span> : ''}
+                                                                                        </td>
+                                                                                        {batchYearsList.map(yr => {
+                                                                                            const yrNum = Number(yr);
+                                                                                            const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
+                                                                                            const studentCurrentYear = Number(student.current_year || 1);
+                                                                                            const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
+                                                                                            const dVal = isFutureYear ? 0 : (fh.yearDues?.[yr] || 0);
                                                                                             return (
-                                                                                                <>
-                                                                                                    {breakdowns.map((fh, fIdx) => (
-                                                                                                        <tr key={fh.headId || fIdx} className="hover:bg-gray-50/50">
-                                                                                                            <td className="py-2.5 font-bold text-gray-700">
-                                                                                                                {fh.headName} {fh.headCode ? <span className="text-gray-400 font-normal">({fh.headCode})</span> : ''}
-                                                                                                            </td>
-                                                                                                            {batchYearsList.map(yr => {
-                                                                                                                const yrNum = Number(yr);
-                                                                                                                const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
-                                                                                                                const studentCurrentYear = Number(student.current_year || 1);
-                                                                                                                const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
-                                                                                                                const dVal = isFutureYear ? 0 : (fh.yearDues?.[yr] || 0);
-                                                                                                                return (
-                                                                                                                    <td key={yr} className="py-2.5 text-right font-medium bg-blue-50/5">
-                                                                                                                        {isFutureYear ? (
-                                                                                                                            <span className="text-gray-300 italic text-[11px] select-none">—</span>
-                                                                                                                        ) : (
-                                                                                                                            <span className={dVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                                                                                ₹{dVal.toLocaleString('en-IN')}
-                                                                                                                            </span>
-                                                                                                                        )}
-                                                                                                                    </td>
-                                                                                                                );
-                                                                                                            })}
-                                                                                                            <td className="py-2.5 text-right font-bold text-red-600">
-                                                                                                                ₹{(fh.totalDue || 0).toLocaleString('en-IN')}
-                                                                                                            </td>
-                                                                                                        </tr>
-                                                                                                    ))}
-                                                                                                    <tr className="bg-gray-50/80 font-bold border-t-2 border-gray-200">
-                                                                                                        <td className="py-2 text-gray-800">Total Dues</td>
-                                                                                                        {batchYearsList.map(yr => {
-                                                                                                            const yrNum = Number(yr);
-                                                                                                            const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
-                                                                                                            const studentCurrentYear = Number(student.current_year || 1);
-                                                                                                            const isFutureYear = restrictToCurrentYear && yrNum > studentCurrentYear;
-                                                                                                            const yTotal = isFutureYear ? 0 : (student.yearDues?.[yr] || 0);
-                                                                                                            return (
-                                                                                                                <td key={yr} className="py-2 text-right text-red-600 font-bold bg-blue-50/10">
-                                                                                                                    {isFutureYear ? (
-                                                                                                                        <span className="text-gray-300 italic text-[11px] font-normal select-none">—</span>
-                                                                                                                    ) : (
-                                                                                                                        `₹${yTotal.toLocaleString('en-IN')}`
-                                                                                                                    )}
-                                                                                                                </td>
-                                                                                                            );
-                                                                                                        })}
-                                                                                                        <td className="py-2 text-right text-red-600 font-bold">
-                                                                                                            ₹{(batchYearsList.reduce((sum, yr) => {
-                                                                                                                const yrNum = Number(yr);
-                                                                                                                const restrictToCurrentYear = receiptSettings?.showCardsUpToCurrentYear !== false;
-                                                                                                                const studentCurrentYear = Number(student.current_year || 1);
-                                                                                                                if (restrictToCurrentYear && yrNum > studentCurrentYear) return sum;
-                                                                                                                return sum + (student.yearDues?.[yr] || 0);
-                                                                                                            }, 0)).toLocaleString('en-IN')}
-                                                                                                        </td>
-                                                                                                    </tr>
-                                                                                                </>
+                                                                                                <td key={yr} className="p-2 text-right bg-blue-50/10">
+                                                                                                    {isFutureYear ? (
+                                                                                                        <span className="text-gray-300 italic text-[11px] select-none">—</span>
+                                                                                                    ) : (
+                                                                                                        <span className={dVal > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                            ₹{dVal.toLocaleString('en-IN')}
+                                                                                                        </span>
+                                                                                                    )}
+                                                                                                </td>
                                                                                             );
-                                                                                        })()}
-                                                                                    </tbody>
-                                                                                </table>
-                                                                            </>
-                                                                        ) : (
-                                                                            <table className="w-full text-xs text-left border-collapse">
-                                                                                <thead>
-                                                                                    <tr className="text-gray-500 border-b border-gray-200 text-[10px] uppercase font-bold">
-                                                                                        <th className="pb-2">Fee Category</th>
-                                                                                        <th className="pb-2 text-right">Total</th>
-                                                                                        <th className="pb-2 text-right">Paid</th>
-                                                                                        {Array.from({ length: maxTerms }).map((_, i) => (
-                                                                                            <th key={i} className="pb-2 text-right text-gray-500 bg-blue-50/15 w-28">
-                                                                                                <div>T{i + 1} Due</div>
-                                                                                                {termHeaderDates[i] && (
-                                                                                                    <div className="text-[9px] font-normal text-gray-400 mt-0.5">{termHeaderDates[i]}</div>
-                                                                                                )}
-                                                                                            </th>
-                                                                                        ))}
-                                                                                        <th className="pb-2 text-right">Active Due</th>
-                                                                                        <th className="pb-2 text-right">Concession</th>
-                                                                                        <th className="pb-2 text-right">Due</th>
+                                                                                        })}
+                                                                                        <td className="p-2 text-right font-bold text-red-600">
+                                                                                            ₹{(fh.totalDue || 0).toLocaleString('en-IN')}
+                                                                                        </td>
+                                                                                        <td className="p-2"></td>
                                                                                     </tr>
-                                                                                </thead>
-                                                                                <tbody className="divide-y divide-gray-100">
-                                                                                    {(() => {
-                                                                                        const categories = [
-                                                                                            { key: 'academic', label: 'Academic Fees' },
-                                                                                            { key: 'hostel', label: 'Hostel Fee' },
-                                                                                            { key: 'transport', label: 'Transport Fee' }
-                                                                                        ].filter(c => student.groupedFeeDetails?.[c.key]);
+                                                                                ))}
+                                                                            </>
+                                                                        );
+                                                                    })()
+                                                                ) : (
+                                                                    (() => {
+                                                                        const categories = [
+                                                                            { key: 'academic', label: 'Academic Fees' },
+                                                                            { key: 'hostel', label: 'Hostel Fee' },
+                                                                            { key: 'transport', label: 'Transport Fee' }
+                                                                        ].filter(c => student.groupedFeeDetails?.[c.key]);
 
-                                                                                        if (categories.length === 0) {
-                                                                                            return <tr><td colSpan={7 + maxTerms} className="text-center py-4 text-gray-400 italic">No breakdown details found.</td></tr>;
-                                                                                        }
+                                                                        if (categories.length === 0) {
+                                                                            return (
+                                                                                <tr className="bg-blue-50/15 border-b border-gray-100">
+                                                                                    <td colSpan={totalColSpan} className="text-center py-2.5 text-xs text-gray-400 italic">
+                                                                                        No breakdown details found.
+                                                                                    </td>
+                                                                                </tr>
+                                                                            );
+                                                                        }
 
-                                                                                        return categories.map(cat => {
-                                                                                            const catData = student.groupedFeeDetails[cat.key];
-                                                                                            const catActiveDue = (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
-                                                                                            return (
-                                                                                                <tr key={cat.key} className="hover:bg-gray-50/50">
-                                                                                                    <td className="py-2.5 font-bold text-gray-700">{cat.label}</td>
-                                                                                                    <td className="py-2.5 text-right text-gray-600">₹{catData.total.toLocaleString('en-IN')}</td>
-                                                                                                    <td className="py-2.5 text-right text-green-600 font-semibold">₹{(catData.paid || 0).toLocaleString('en-IN')}</td>
-                                                                                                    {Array.from({ length: maxTerms }).map((_, i) => {
-                                                                                                        const termObj = (catData.terms || []).find(t => Number(t.termNumber) === (i + 1));
-                                                                                                        const termBalance = termObj ? (termObj.balance || 0) : 0;
-                                                                                                        const termTarget = termObj ? (termObj.termTarget || 0) : 0;
-                                                                                                        const termConc = termObj ? (termObj.concessionShare || 0) : 0;
-                                                                                                        
-                                                                                                        const tDate = termObj?.dueDate ? new Date(termObj.dueDate) : null;
-                                                                                                        const fTermDate = tDate && !isNaN(tDate.getTime())
-                                                                                                            ? tDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-                                                                                                            : null;
+                                                                        return (
+                                                                            <>
+                                                                                <tr className="bg-slate-100 text-gray-600 text-xs font-semibold border-t-2 border-b border-blue-200">
+                                                                                    <th className="p-2 text-center text-blue-600 font-semibold">↳</th>
+                                                                                    <th colSpan={3} className="p-2 text-left pl-3 text-gray-700 font-semibold">Fee Category</th>
+                                                                                    <th className="p-2 text-right text-gray-700 font-semibold">Total Fee</th>
+                                                                                    <th className="p-2 text-right text-purple-800 font-semibold">Concession</th>
+                                                                                    <th className="p-2 text-right text-green-700 font-semibold">Paid</th>
+                                                                                    {Array.from({ length: maxTerms }).map((_, i) => (
+                                                                                        <th key={i} className="p-2 text-right text-gray-700 font-semibold bg-blue-100/40">
+                                                                                            <div>T{i + 1} Due</div>
+                                                                                            {termHeaderDates[i] && (
+                                                                                                <div className="text-[9px] font-normal text-slate-500 mt-0.5">{termHeaderDates[i]}</div>
+                                                                                            )}
+                                                                                        </th>
+                                                                                    ))}
+                                                                                    <th className="p-2 text-right text-gray-700 font-semibold">Previous Due</th>
+                                                                                    <th className="p-2 text-right text-amber-700 font-semibold">Active Due</th>
+                                                                                    <th className="p-2 text-right text-red-700 font-semibold">Due</th>
+                                                                                    <th className="p-2"></th>
+                                                                                </tr>
+                                                                                {categories.map(cat => {
+                                                                                    const catData = student.groupedFeeDetails[cat.key];
+                                                                                    const catActiveDue = (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
+                                                                                    return (
+                                                                                        <tr key={cat.key} className="bg-blue-50/20 hover:bg-blue-50/35 border-b border-dashed border-gray-200 text-xs transition">
+                                                                                            <td className="p-2 text-center text-blue-500 font-bold">↳</td>
+                                                                                            <td colSpan={3} className="p-2 font-bold text-gray-700 pl-3">
+                                                                                                {cat.label}
+                                                                                            </td>
+                                                                                            <td className="p-2 text-right text-gray-600">₹{catData.total.toLocaleString('en-IN')}</td>
+                                                                                            <td className="p-2 text-right text-purple-700 font-medium">₹{catData.concession.toLocaleString('en-IN')}</td>
+                                                                                            <td className="p-2 text-right text-green-600 font-semibold">₹{(catData.paid || 0).toLocaleString('en-IN')}</td>
+                                                                                            {Array.from({ length: maxTerms }).map((_, i) => {
+                                                                                                const termObj = (catData.terms || []).find(t => Number(t.termNumber) === (i + 1));
+                                                                                                const termBalance = termObj ? (termObj.balance || 0) : 0;
+                                                                                                const termTarget = termObj ? (termObj.termTarget || 0) : 0;
+                                                                                                const termConc = termObj ? (termObj.concessionShare || 0) : 0;
+                                                                                                const tDate = termObj?.dueDate ? new Date(termObj.dueDate) : null;
+                                                                                                const fTermDate = tDate && !isNaN(tDate.getTime())
+                                                                                                    ? tDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                                                                    : null;
 
-                                                                                                        return (
-                                                                                                            <td key={i} className="py-2.5 text-right text-gray-700 bg-blue-50/5">
-                                                                                                                <div className={termBalance > 0 ? "font-bold text-red-600" : "text-gray-400"}>
-                                                                                                                    ₹{termBalance.toLocaleString('en-IN')}
-                                                                                                                </div>
-                                                                                                                {termTarget > 0 && (
-                                                                                                                    <div className="text-[9px] text-gray-400 font-normal mt-0.5">
-                                                                                                                        Target: ₹{termTarget.toLocaleString('en-IN')}
-                                                                                                                        {termConc > 0 && ` (Conc: ₹${termConc.toLocaleString('en-IN')})`}
-                                                                                                                    </div>
-                                                                                                                )}
-                                                                                                                {termBalance > 0 && fTermDate && (
-                                                                                                                    <div className="text-[9px] text-gray-400 font-normal font-mono mt-0.5">{fTermDate}</div>
-                                                                                                                )}
-                                                                                                            </td>
-                                                                                                        );
-                                                                                                    })}
-                                                                                                    <td className="py-2.5 text-right text-amber-600 font-bold">₹{catActiveDue.toLocaleString('en-IN')}</td>
-                                                                                                    <td className="py-2.5 text-right text-purple-600">₹{catData.concession.toLocaleString('en-IN')}</td>
-                                                                                                    <td className="py-2.5 text-right font-bold text-red-600">₹{catData.due.toLocaleString('en-IN')}</td>
-                                                                                                </tr>
-                                                                                            );
-                                                                                        });
-                                                                                    })()}
-                                                                                </tbody>
-                                                                            </table>
-                                                                        )}
-                                                                    </div>
-                                                                </td>
-                                                            </tr>
+                                                                                                return (
+                                                                                                    <td key={i} className="p-2 text-right text-gray-700 bg-blue-50/10">
+                                                                                                        <div className={termBalance > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                            ₹{termBalance.toLocaleString('en-IN')}
+                                                                                                        </div>
+                                                                                                        {termTarget > 0 && (
+                                                                                                            <div className="text-[9px] text-gray-400 font-normal mt-0.5">
+                                                                                                                Target: ₹{termTarget.toLocaleString('en-IN')}
+                                                                                                                {termConc > 0 && ` (Conc: ₹${termConc.toLocaleString('en-IN')})`}
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                        {termBalance > 0 && fTermDate && (
+                                                                                                            <div className="text-[9px] text-gray-400 font-normal font-mono mt-0.5">{fTermDate}</div>
+                                                                                                        )}
+                                                                                                    </td>
+                                                                                                );
+                                                                                            })}
+                                                                                            <td className="p-2 text-right font-medium">
+                                                                                                {Number(catData.previousDue || 0) > 0 ? (
+                                                                                                    <span className="font-bold text-red-600">
+                                                                                                        ₹{Number(catData.previousDue).toLocaleString('en-IN')}
+                                                                                                    </span>
+                                                                                                ) : (
+                                                                                                    <span className="text-gray-400">₹0</span>
+                                                                                                )}
+                                                                                            </td>
+                                                                                            <td className="p-2 text-right text-amber-600 font-bold">₹{catActiveDue.toLocaleString('en-IN')}</td>
+                                                                                            <td className="p-2 text-right font-bold text-red-600">₹{catData.due.toLocaleString('en-IN')}</td>
+                                                                                            <td className="p-2"></td>
+                                                                                        </tr>
+                                                                                    );
+                                                                                })}
+                                                                                {categories.length > 1 && (
+                                                                                    <tr className="bg-slate-100/90 font-bold border-t-2 border-gray-300 text-xs">
+                                                                                        <td className="p-2 text-center text-gray-600 font-bold">Total</td>
+                                                                                        <td colSpan={3} className="p-2 font-bold text-gray-800 pl-3">Total Dues</td>
+                                                                                        <td className="p-2 text-right text-gray-800">₹{(student.totalFee || 0).toLocaleString('en-IN')}</td>
+                                                                                        <td className="p-2 text-right text-purple-700 font-medium">₹{(student.concessionAmount || 0).toLocaleString('en-IN')}</td>
+                                                                                        <td className="p-2 text-right text-green-600 font-semibold">₹{(student.paidAmount || 0).toLocaleString('en-IN')}</td>
+                                                                                        {Array.from({ length: maxTerms }).map((_, i) => (
+                                                                                            <td key={i} className="p-2 text-right bg-blue-100/30">
+                                                                                                <span className={(student.termDues?.[i] || 0) > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                    ₹{(student.termDues?.[i] || 0).toLocaleString('en-IN')}
+                                                                                                </span>
+                                                                                            </td>
+                                                                                        ))}
+                                                                                        <td className="p-2 text-right">
+                                                                                            <span className={(student.previousDue || 0) > 0 ? "font-bold text-red-600" : "text-gray-400"}>
+                                                                                                ₹{(student.previousDue || 0).toLocaleString('en-IN')}
+                                                                                            </span>
+                                                                                        </td>
+                                                                                        <td className="p-2 text-right text-amber-600 font-bold">₹{(student.activeDue || 0).toLocaleString('en-IN')}</td>
+                                                                                        <td className="p-2 text-right text-red-600 font-bold">₹{(student.dueAmount || 0).toLocaleString('en-IN')}</td>
+                                                                                        <td className="p-2"></td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </>
+                                                                        );
+                                                                    })()
+                                                                )}
+                                                            </>
                                                         )}
                                                     </React.Fragment>
                                                 );

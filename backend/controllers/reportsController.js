@@ -2246,6 +2246,9 @@ const getDueReports = async (req, res) => {
                 transport: finalizeCategory(transportSummary)
             };
             const studentYearDues = {};
+            const categoryPrevDues = { academic: 0, hostel: 0, transport: 0 };
+            const currentSelectedYr = Number(targetStudentYear || student.current_year || 1);
+
             Object.values(allYearsGroupedData).forEach(item => {
                 const yr = Number(item.studentYear || 1);
                 if (restrictToCurrentYear && yr > studentCurrentYear) {
@@ -2254,9 +2257,32 @@ const getDueReports = async (req, res) => {
                 item.dueAmount = Math.max(0, (item.totalAmount || 0) - (item.paidAmount || 0) - (item.concessionAmount || 0));
                 if (!studentYearDues[yr]) studentYearDues[yr] = 0;
                 studentYearDues[yr] += item.dueAmount;
+
+                if (yr < currentSelectedYr && item.dueAmount > 0) {
+                    const cat = getFeeHeadCategory(item.feeHeadId, item.feeHeadCode, item.feeHeadName, item.academicYear);
+                    if (cat === 'HOSTEL') categoryPrevDues.hostel += item.dueAmount;
+                    else if (cat === 'TRANSPORT') categoryPrevDues.transport += item.dueAmount;
+                    else categoryPrevDues.academic += item.dueAmount;
+                }
             });
             student.yearDues = studentYearDues;
             student.restrictToCurrentYear = restrictToCurrentYear;
+
+            ['academic', 'hostel', 'transport'].forEach(catKey => {
+                const prev = categoryPrevDues[catKey] || 0;
+                if (student.groupedFeeDetails[catKey]) {
+                    student.groupedFeeDetails[catKey].previousDue = prev;
+                } else if (prev > 0) {
+                    student.groupedFeeDetails[catKey] = {
+                        total: 0,
+                        paid: 0,
+                        concession: 0,
+                        due: 0,
+                        previousDue: prev,
+                        terms: []
+                    };
+                }
+            });
 
             student.rawGroupedData = Object.values(groupedData).map(item => ({
                 feeHeadId: item.feeHeadId,
@@ -2308,15 +2334,9 @@ const getDueReports = async (req, res) => {
             student.termDues = termDues;
             student.termDueDates = termDueDates;
             student.concessionAmount = (academicSummary.concession || 0) + (hostelSummary.concession || 0) + (transportSummary.concession || 0);
-            if (reportType === 'batch') {
-                student.dueAmount = Object.values(studentYearDues).reduce((a, b) => a + Number(b || 0), 0);
-            } else {
-                student.dueAmount = Math.max(0, (academicSummary.due || 0) + (hostelSummary.due || 0) + (transportSummary.due || 0));
-            }
             student.scholarshipStatus = getScholarshipStatus(student.id, targetStudentYear || student.current_year) || 'not_eligible';
 
             // Calculate previous due: dues from prior academic years (i.e. year < current studentYear / targetStudentYear)
-            const currentSelectedYr = Number(targetStudentYear || student.current_year || 1);
             let prevDueCalc = 0;
             if (student.yearDues) {
                 Object.entries(student.yearDues).forEach(([yrStr, yrDue]) => {
@@ -2328,6 +2348,13 @@ const getDueReports = async (req, res) => {
             }
             student.previousDue = Math.max(0, prevDueCalc);
             student.activeDue = Math.max(0, activeDue + student.previousDue);
+
+            if (reportType === 'batch') {
+                student.dueAmount = Object.values(studentYearDues).reduce((a, b) => a + Number(b || 0), 0);
+            } else {
+                const termsSum = termDues.reduce((a, b) => a + Number(b || 0), 0);
+                student.dueAmount = Math.max(0, student.previousDue + termsSum);
+            }
 
             student.feeDetailsArray = Object.keys(student.feeDetails).map(fid => {
                 const detail = student.feeDetails[fid];

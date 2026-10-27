@@ -118,20 +118,23 @@ const DueReportPrintTemplate = forwardRef(({
 
     // Colgroup for Academic Year Mode
     const baseColCount = 4;
-    const totalColCount = baseColCount + 2 + maxTerms + 1;
+    const totalColCount = baseColCount + 3 + maxTerms + 3;
 
     const renderColGroup = () => (
         <colgroup>
-            <col style={{ width: '26px' }} />
-            <col style={{ width: '72px' }} />
-            <col style={{ width: '72px' }} />
-            <col style={{ width: '170px' }} />
-            <col style={{ width: '58px' }} />
+            <col style={{ width: '24px' }} />
+            <col style={{ width: '68px' }} />
+            <col style={{ width: '68px' }} />
+            <col style={{ width: '150px' }} />
+            <col style={{ width: '54px' }} />
+            <col style={{ width: '50px' }} />
             <col style={{ width: '50px' }} />
             {Array.from({ length: maxTerms }).map((_, i) => (
-                <col key={i} style={{ width: '58px' }} />
+                <col key={i} style={{ width: '54px' }} />
             ))}
-            <col style={{ width: '60px' }} />
+            <col style={{ width: '56px' }} />
+            <col style={{ width: '56px' }} />
+            <col style={{ width: '58px' }} />
         </colgroup>
     );
 
@@ -179,13 +182,12 @@ const DueReportPrintTemplate = forwardRef(({
             return <div style={{ padding: '6px', fontStyle: 'italic', color: '#000', fontSize: '9px' }}>No breakdown details found.</div>;
         }
 
-        const totalFee = categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].total || 0), 0);
-        const concession = categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].concession || 0), 0);
-        const dueAmount = categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].due || 0), 0);
-        const activeDue = categories.reduce((sum, cat) => {
-            const catData = st.groupedFeeDetails[cat.key];
-            return sum + (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
-        }, 0);
+        const totalFee = st.totalFee !== undefined ? st.totalFee : categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].total || 0), 0);
+        const concession = st.concessionAmount !== undefined ? st.concessionAmount : categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].concession || 0), 0);
+        const paidAmount = st.paidAmount !== undefined ? st.paidAmount : categories.reduce((sum, cat) => sum + Number(st.groupedFeeDetails[cat.key].paid || 0), 0);
+        const previousDue = Number(st.previousDue || 0);
+        const activeDue = Number(st.activeDue || 0);
+        const dueAmount = Number(st.dueAmount || 0);
 
         const termTotals = Array.from({ length: maxTermsVal }).map((_, i) =>
             categories.reduce((sum, cat) => {
@@ -196,22 +198,24 @@ const DueReportPrintTemplate = forwardRef(({
         );
 
         return (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', marginTop: '4px', border: '1px solid #000' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '8.5px', marginTop: '4px', border: '1px solid #000' }}>
                 <thead>
                     <tr>
-                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'left', fontWeight: 'bold', color: '#000', backgroundColor: '#fff' }}>Fee Category</th>
-                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '70px', color: '#000', backgroundColor: '#fff' }}>Total</th>
+                        <th style={{ ...thStyle, textAlign: 'left' }}>Fee Category</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '65px' }}>Total Fee</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>Concession</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '60px' }}>Paid</th>
                         {Array.from({ length: maxTermsVal }).map((_, i) => (
-                            <th key={i} style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '65px', color: '#000', backgroundColor: '#fff' }}>
+                            <th key={i} style={{ ...thStyle, textAlign: 'right', width: '60px' }}>
                                 <div>T{i + 1} Due</div>
                                 {termHeaderDates[i] && (
-                                    <div style={{ fontSize: '7.5px', fontWeight: 'normal', color: '#000', marginTop: '1px' }}>{termHeaderDates[i]}</div>
+                                    <div style={{ fontSize: '7px', fontWeight: 'normal', color: '#000', marginTop: '1px' }}>{termHeaderDates[i]}</div>
                                 )}
                             </th>
                         ))}
-                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '70px', color: '#000', backgroundColor: '#fff' }}>Active Due</th>
-                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '70px', color: '#000', backgroundColor: '#fff' }}>Concession</th>
-                        <th style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', fontWeight: 'bold', width: '70px', color: '#000', backgroundColor: '#fff' }}>Due</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '65px' }}>Previous Due</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '65px' }}>Active Due</th>
+                        <th style={{ ...thStyle, textAlign: 'right', width: '65px', backgroundColor: '#ececec' }}>Total Due</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -220,8 +224,10 @@ const DueReportPrintTemplate = forwardRef(({
                         const catActiveDue = (catData.terms || []).reduce((acc, t) => acc + (t.isActiveTerm ? (t.balance || 0) : 0), 0);
                         return (
                             <tr key={cat.key}>
-                                <td style={{ border: '1px solid #000', padding: '4px 6px', fontWeight: 'bold', color: '#000', backgroundColor: '#fff' }}>{cat.label}</td>
-                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(catData.total)}</td>
+                                <td style={{ ...tdStyle, fontWeight: 'bold' }}>{cat.label}</td>
+                                <td style={{ ...tdStyle, textAlign: 'right' }}>₹{fmtAmount(catData.total)}</td>
+                                <td style={{ ...tdStyle, textAlign: 'right' }}>₹{fmtAmount(catData.concession)}</td>
+                                <td style={{ ...tdStyle, textAlign: 'right' }}>₹{fmtAmount(catData.paid)}</td>
                                 {Array.from({ length: maxTermsVal }).map((_, i) => {
                                     const termObj = (catData.terms || []).find((t) => Number(t.termNumber) === i + 1);
                                     const termBalance = termObj ? termObj.balance || 0 : 0;
@@ -230,37 +236,41 @@ const DueReportPrintTemplate = forwardRef(({
                                     const fTermDate = formatTermDateShort(termObj?.dueDate);
 
                                     return (
-                                        <td key={i} style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', backgroundColor: '#fff' }}>
+                                        <td key={i} style={{ ...tdStyle, textAlign: 'right' }}>
                                             <div style={{ fontWeight: termBalance > 0 ? 'bold' : 'normal', color: '#000' }}>
                                                 ₹{fmtAmount(termBalance)}
                                             </div>
                                             {termTarget > 0 && (
-                                                <div style={{ fontSize: '7.5px', color: '#000', fontWeight: 'normal', marginTop: '1px' }}>
+                                                <div style={{ fontSize: '7px', color: '#555', fontWeight: 'normal', marginTop: '1px' }}>
                                                     Target: ₹{fmtAmount(termTarget)}
                                                     {termConc > 0 && ` (Conc: ₹${fmtAmount(termConc)})`}
                                                 </div>
                                             )}
                                             {termBalance > 0 && fTermDate && (
-                                                <div style={{ fontSize: '7.5px', color: '#000', fontWeight: 'normal', fontFamily: 'monospace', marginTop: '1px' }}>{fTermDate}</div>
+                                                <div style={{ fontSize: '7px', color: '#555', fontWeight: 'normal', fontFamily: 'monospace', marginTop: '1px' }}>{fTermDate}</div>
                                             )}
                                         </td>
                                     );
                                 })}
-                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', color: '#000', fontWeight: 'bold', backgroundColor: '#fff' }}>₹{fmtAmount(catActiveDue)}</td>
-                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(catData.concession)}</td>
-                                <td style={{ border: '1px solid #000', padding: '4px 6px', textAlign: 'right', color: '#000', fontWeight: 'bold', backgroundColor: '#fff' }}>₹{fmtAmount(catData.due)}</td>
+                                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: (catData.previousDue || 0) > 0 ? 'bold' : 'normal' }}>
+                                    ₹{fmtAmount(catData.previousDue || 0)}
+                                </td>
+                                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold' }}>₹{fmtAmount(catActiveDue)}</td>
+                                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold', backgroundColor: '#ececec' }}>₹{fmtAmount(catData.due)}</td>
                             </tr>
                         );
                     })}
                     <tr style={{ fontWeight: 'bold' }}>
-                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'left', color: '#000', backgroundColor: '#fff' }}>GRAND TOTAL</td>
-                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(totalFee)}</td>
+                        <td style={{ ...tdStyle, fontWeight: 'bold', textAlign: 'left', backgroundColor: '#f9f9f9' }}>GRAND TOTAL</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(totalFee)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(concession)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(paidAmount)}</td>
                         {termTotals.map((termTotal, idx) => (
-                            <td key={idx} style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(termTotal)}</td>
+                            <td key={idx} style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(termTotal)}</td>
                         ))}
-                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(activeDue)}</td>
-                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', backgroundColor: '#fff' }}>₹{fmtAmount(concession)}</td>
-                        <td style={{ border: '1px solid #000', padding: '5px 6px', textAlign: 'right', color: '#000', fontWeight: 'bold', backgroundColor: '#fff' }}>₹{fmtAmount(dueAmount)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(previousDue)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', backgroundColor: '#f9f9f9' }}>₹{fmtAmount(activeDue)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 'bold', backgroundColor: '#ececec' }}>₹{fmtAmount(dueAmount)}</td>
                     </tr>
                 </tbody>
             </table>
@@ -337,39 +347,53 @@ const DueReportPrintTemplate = forwardRef(({
     // ==========================================
     if (type === 'individual') {
         const studentInfo = student || {};
+        const printedOn = formatPrintedOn();
+
         return (
-            <div ref={ref} style={{ padding: '24px', fontFamily: 'Arial, sans-serif', color: '#000', backgroundColor: '#fff' }}>
+            <div ref={ref} style={{ padding: '16px 18px', fontFamily: 'Arial, sans-serif', color: '#000', backgroundColor: '#fff' }}>
                 <style type="text/css">
                     {`
-                        @page { size: A4 landscape; margin: 8mm; }
+                        @page { size: A4 landscape; margin: 6mm; }
                         @media print {
-                            @page { size: A4 landscape; margin: 8mm; }
+                            @page { size: A4 landscape; margin: 6mm; }
                             body { background-color: #fff; }
                         }
                     `}
                 </style>
 
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '8px', marginBottom: '16px' }}>
-                    <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>Pydah Group of Colleges</h1>
-                    <p style={{ margin: '4px 0', fontSize: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>
-                        {isBatchMode ? 'BATCH DUE STATEMENT' : 'INDIVIDUAL DUE STATEMENT'}
+                {/* Institutional Header matching Overall Print */}
+                <div style={{ textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '6px', marginBottom: '8px' }}>
+                    <h1 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>Pydah Group of Colleges</h1>
+                    <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                        {isBatchMode ? 'INDIVIDUAL BATCH DUE STATEMENT' : 'INDIVIDUAL ACADEMIC DUE STATEMENT'} AS ON DATE : {printedOn}
                     </p>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', border: '1.5px solid #000', padding: '12px', marginBottom: '16px', borderRadius: '4px', fontSize: '11px' }}>
+                {/* Student Info Box matching Overall Print Filter Box format */}
+                <div style={{ border: '1px solid #000', padding: '6px 10px', marginBottom: '10px', fontSize: '9px', display: 'flex', flexWrap: 'wrap', gap: '4px 16px', backgroundColor: '#fff' }}>
                     <div><strong>Student Name:</strong> <span style={{ textTransform: 'uppercase', fontWeight: 'bold' }}>{studentInfo.student_name}</span></div>
-                    <div><strong>Admission No:</strong> <span style={{ fontWeight: 'bold' }}>{studentInfo.admission_number}</span></div>
-                    <div><strong>PIN Number:</strong> <span style={{ fontWeight: 'bold' }}>{studentInfo.pin_no || '-'}</span></div>
-                    <div><strong>College:</strong> {studentInfo.college || '-'}</div>
-                    <div><strong>Course & Branch:</strong> {studentInfo.course} - {studentInfo.branch}</div>
+                    <div><strong>Admission No:</strong> <span style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{studentInfo.admission_number || '-'}</span></div>
+                    <div><strong>PIN Number:</strong> <span style={{ fontWeight: 'bold', fontFamily: 'monospace' }}>{studentInfo.pin_no || '-'}</span></div>
+                    <div><strong>College:</strong> {studentInfo.college || filters.college || '-'}</div>
+                    <div><strong>Course:</strong> {studentInfo.course || filters.course || '-'}</div>
+                    <div><strong>Branch:</strong> {studentInfo.branch || filters.branch || '-'}</div>
                     {isBatchMode ? (
                         <div><strong>Batch:</strong> <span style={{ fontWeight: 'bold' }}>{studentInfo.batch || filters.batch || '-'}</span></div>
                     ) : (
-                        <div><strong>Academic Year / Sem:</strong> Year {studentInfo.current_year || studentInfo.studentYear || studentInfo.year || '-'}</div>
+                        <div><strong>Academic Year:</strong> Year {studentInfo.current_year || studentInfo.year || filters.year || '-'}</div>
                     )}
+                    <div><strong>Status:</strong> {studentInfo.student_status || studentInfo.studentStatus || 'Active'}</div>
+                    <div><strong>Quota:</strong> {studentInfo.stud_type || studentInfo.quota || '-'}</div>
+                    <div><strong>Scholarship:</strong> {String(studentInfo.scholarshipStatus).toLowerCase() === 'eligible' ? 'Eligible' : 'Not Eligible'}</div>
+                    <div><strong>Active Due:</strong> <span style={{ fontWeight: 'bold' }}>₹{fmtAmount(studentInfo.activeDue)}</span></div>
+                    <div><strong>Total Due:</strong> <span style={{ fontWeight: 'bold' }}>₹{fmtAmount(studentInfo.dueAmount)}</span></div>
                 </div>
 
-                <div style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '9.5px', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>
+                    {isBatchMode ? 'Fee Head Wise Year Dues Breakdown' : 'Fee Category & Term Dues Breakdown'}
+                </div>
+
+                <div>
                     {isBatchMode
                         ? renderBatchBreakdownTable(studentInfo, resolvedBatchYears)
                         : renderBreakdownTable(studentInfo, maxTerms)}
@@ -513,11 +537,14 @@ const DueReportPrintTemplate = forwardRef(({
     // ==========================================
     const totalStudents = reportData.length;
     const grandFee = summary.totalFee || reportData.reduce((sum, s) => sum + Number(s.totalFee || 0), 0);
+    const grandConcession = summary.totalConcession || reportData.reduce((sum, s) => sum + Number(s.concessionAmount || 0), 0);
     const grandCollected = summary.totalCollected || reportData.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
-    const grandActiveDue = reportData.reduce((sum, s) => sum + Number(s.activeDue || 0), 0);
     const grandTermDues = Array.from({ length: maxTerms }).map((_, i) =>
         reportData.reduce((sum, s) => sum + Number(s.termDues?.[i] || 0), 0)
     );
+    const grandPreviousDue = summary.totalPreviousDue || reportData.reduce((sum, s) => sum + Number(s.previousDue || 0), 0);
+    const grandActiveDue = summary.totalActiveDue || reportData.reduce((sum, s) => sum + Number(s.activeDue || 0), 0);
+    const grandDueAmount = summary.totalDue || reportData.reduce((sum, s) => sum + Number(s.dueAmount || 0), 0);
 
     const isYearFiltered = Boolean(filters.year && String(filters.year).trim() !== '');
 
@@ -565,11 +592,14 @@ const DueReportPrintTemplate = forwardRef(({
             {sortedYearKeys.map((yearKey, yIdx) => {
                 const groupStudents = yearGroups[yearKey];
                 const yFee = groupStudents.reduce((sum, s) => sum + Number(s.totalFee || 0), 0);
+                const yConcession = groupStudents.reduce((sum, s) => sum + Number(s.concessionAmount || 0), 0);
                 const yPaid = groupStudents.reduce((sum, s) => sum + Number(s.paidAmount || 0), 0);
-                const yActiveDue = groupStudents.reduce((sum, s) => sum + Number(s.activeDue || 0), 0);
                 const yTermDues = Array.from({ length: maxTerms }).map((_, i) =>
                     groupStudents.reduce((sum, s) => sum + Number(s.termDues?.[i] || 0), 0)
                 );
+                const yPreviousDue = groupStudents.reduce((sum, s) => sum + Number(s.previousDue || 0), 0);
+                const yActiveDue = groupStudents.reduce((sum, s) => sum + Number(s.activeDue || 0), 0);
+                const yDueAmount = groupStudents.reduce((sum, s) => sum + Number(s.dueAmount || 0), 0);
                 const isLastYear = yIdx === sortedYearKeys.length - 1;
                 const showYearSubTotal = sortedYearKeys.length > 1;
                 const activeDueCellBg = '#ececec';
@@ -587,7 +617,7 @@ const DueReportPrintTemplate = forwardRef(({
                         <div style={{ textAlign: 'center', borderBottom: '2px solid #000', paddingBottom: '6px', marginBottom: '8px' }}>
                             <h1 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase' }}>Pydah Group of Colleges</h1>
                             <p style={{ margin: '3px 0', fontSize: '11px', fontWeight: 'bold', letterSpacing: '0.5px' }}>
-                                ACTIVE DUE AS ON DATE : {printedOn}
+                                ACADEMIC DUE REPORT AS ON DATE : {printedOn}
                                 {!isYearFiltered ? ` — ${yearKey.toUpperCase()}` : ''}
                             </p>
                         </div>
@@ -618,6 +648,7 @@ const DueReportPrintTemplate = forwardRef(({
                                     <th style={{ ...thStyle, textAlign: 'center' }}>Admission No</th>
                                     <th style={{ ...thStyle, textAlign: 'left' }}>Student Name</th>
                                     <th style={{ ...thStyle, textAlign: 'center' }}>Total Fee</th>
+                                    <th style={{ ...thStyle, textAlign: 'center' }}>Concession</th>
                                     <th style={{ ...thStyle, textAlign: 'center' }}>Paid</th>
                                     {Array.from({ length: maxTerms }).map((_, i) => (
                                         <th key={i} style={{ ...thStyle, textAlign: 'center' }}>
@@ -629,7 +660,9 @@ const DueReportPrintTemplate = forwardRef(({
                                             )}
                                         </th>
                                     ))}
-                                    <th style={{ ...thStyle, textAlign: 'center', backgroundColor: activeDueCellBg }}>Active Due</th>
+                                    <th style={{ ...thStyle, textAlign: 'center' }}>Previous Due</th>
+                                    <th style={{ ...thStyle, textAlign: 'center' }}>Active Due</th>
+                                    <th style={{ ...thStyle, textAlign: 'center', backgroundColor: activeDueCellBg }}>Total Due</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -645,6 +678,7 @@ const DueReportPrintTemplate = forwardRef(({
                                                     {st.student_name}
                                                 </td>
                                                 <td style={{ ...tdStyle, textAlign: 'center' }}>₹{fmtAmount(st.totalFee)}</td>
+                                                <td style={{ ...tdStyle, textAlign: 'center' }}>₹{fmtAmount(st.concessionAmount)}</td>
                                                 <td style={{ ...tdStyle, textAlign: 'center' }}>₹{fmtAmount(st.paidAmount)}</td>
                                                 {Array.from({ length: maxTerms }).map((_, i) => {
                                                     const termDue = Number(termDues[i] || 0);
@@ -661,8 +695,14 @@ const DueReportPrintTemplate = forwardRef(({
                                                         </td>
                                                     );
                                                 })}
-                                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: activeDueCellBg }}>
+                                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: (st.previousDue || 0) > 0 ? 'bold' : 'normal' }}>
+                                                    ₹{fmtAmount(st.previousDue)}
+                                                </td>
+                                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>
                                                     ₹{fmtAmount(st.activeDue)}
+                                                </td>
+                                                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: activeDueCellBg }}>
+                                                    ₹{fmtAmount(st.dueAmount)}
                                                 </td>
                                             </tr>
                                             {includeDetails && (
@@ -683,14 +723,17 @@ const DueReportPrintTemplate = forwardRef(({
                                             {yearKey} Sub-Total ({groupStudents.length} Students)
                                         </td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>₹{fmtAmount(yFee)}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>₹{fmtAmount(yConcession)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>₹{fmtAmount(yPaid)}</td>
                                         {yTermDues.map((amt, i) => (
                                             <td key={i} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>
                                                 ₹{fmtAmount(amt)}
                                             </td>
                                         ))}
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>₹{fmtAmount(yPreviousDue)}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold' }}>₹{fmtAmount(yActiveDue)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', backgroundColor: activeDueCellBg }}>
-                                            ₹{fmtAmount(yActiveDue)}
+                                            ₹{fmtAmount(yDueAmount)}
                                         </td>
                                     </tr>
                                 )}
@@ -702,14 +745,17 @@ const DueReportPrintTemplate = forwardRef(({
                                             GRAND TOTAL (All Students: {totalStudents})
                                         </td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>₹{fmtAmount(grandFee)}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>₹{fmtAmount(grandConcession)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>₹{fmtAmount(grandCollected)}</td>
                                         {grandTermDues.map((amt, i) => (
                                             <td key={i} style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>
                                                 ₹{fmtAmount(amt)}
                                             </td>
                                         ))}
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>₹{fmtAmount(grandPreviousDue)}</td>
+                                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000' }}>₹{fmtAmount(grandActiveDue)}</td>
                                         <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 'bold', borderTop: '2px solid #000', backgroundColor: activeDueCellBg }}>
-                                            ₹{fmtAmount(grandActiveDue)}
+                                            ₹{fmtAmount(grandDueAmount)}
                                         </td>
                                     </tr>
                                 )}
