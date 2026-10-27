@@ -1,5 +1,5 @@
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -21,8 +21,8 @@ import OverallConcession from './pages/OverallConcession';
 import Permissions from './pages/Permissions';
 import Settings from './pages/Settings';
 import UserProfile from './pages/UserProfile';
-import Proceedings from './pages/Proceedings';
-import ProceedingsAnalytics from './pages/ProceedingsAnalytics';
+const Proceedings = lazy(() => import('./pages/Proceedings'));
+const ProceedingsAnalytics = lazy(() => import('./pages/ProceedingsAnalytics'));
 import Reports from './pages/Reports';
 import DueReports from './pages/DueReports';
 import VerifyReceipt from './pages/VerifyReceipt';
