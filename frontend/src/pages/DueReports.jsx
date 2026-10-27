@@ -276,8 +276,9 @@ const DueReports = () => {
             setFilters(prev => ({ ...prev, batch: currentBatchVal, year: '' }));
         } else {
             const ayVal = currentAcademicYear || (academicYears[0] || '');
+            const selectedYr = availableYears.includes(filters.year) ? filters.year : (availableYears[0] || '1st Year');
             setTopFilters(prev => ({ ...prev, batch: ayVal }));
-            setFilters(prev => ({ ...prev, batch: ayVal }));
+            setFilters(prev => ({ ...prev, batch: ayVal, year: selectedYr }));
         }
     };
 
@@ -324,19 +325,22 @@ const DueReports = () => {
             setBranches(courseData?.branches || []);
             
             // Populate available years from courseYears metadata
+            let years = [];
             if (courseYears[course]) {
                 const duration = courseYears[course];
-                // Convert number to array of years: e.g., 4 -> ['1st Year', '2nd Year', '3rd Year', '4th Year']
-                const years = [];
                 if (typeof duration === 'number') {
                     for (let i = 1; i <= duration; i++) {
                         const suffix = i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th';
                         years.push(`${i}${suffix} Year`);
                     }
                 }
-                setAvailableYears(years);
-            } else {
-                setAvailableYears([]);
+            }
+            if (years.length === 0) {
+                years = ['1st Year', '2nd Year', '3rd Year', '4th Year'];
+            }
+            setAvailableYears(years);
+            if (reportMode !== 'batch') {
+                newFilters.year = years[0];
             }
         } else {
             setBranches([]);
@@ -346,6 +350,11 @@ const DueReports = () => {
     };
 
     const fetchReport = async () => {
+        // In Academic Year mode, ensure a year is selected
+        if (reportMode !== 'batch' && !filters.year && availableYears.length > 0) {
+            filters.year = availableYears[0];
+        }
+
         // Validation: Must have core filters OR a search term
         // Required: college, course
         // Optional: branch, batch, year, quota
@@ -1095,7 +1104,7 @@ const DueReports = () => {
         if (!excludeScholarship && !hasFeeHeadFilter) {
             return sortedData.map(student => {
                 const breakdown = buildYearAndHeadBreakdown(student, false);
-                const currentSelectedYr = Number(filters.year || student.current_year || 1);
+                const currentSelectedYr = parseInt(filters.year, 10) || Number(student.current_year || 1);
                 const studentCurrentYear = Number(student.current_year || 1);
                 let prevDueCalc = student.previousDue != null ? Number(student.previousDue) : 0;
                 const rawSourceYearDues = student.yearDues || breakdown.yearDues || {};
@@ -1330,7 +1339,7 @@ const DueReports = () => {
                 });
             });
 
-            const currentSelectedYr = Number(filters.year || student.current_year || 1);
+            const currentSelectedYr = parseInt(filters.year, 10) || Number(student.current_year || 1);
             let prevDueCalc = 0;
             if (breakdown.yearDues && Object.keys(breakdown.yearDues).some(y => Number(y) < currentSelectedYr)) {
                 Object.entries(breakdown.yearDues).forEach(([yrStr, yrDue]) => {
@@ -1861,15 +1870,18 @@ const DueReports = () => {
                                     <div className="min-w-[120px] flex-1">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Year</label>
                                         <select
-                                            className="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
+                                            className="bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 font-medium"
                                             value={filters.year}
                                             onChange={e => setFilters({ ...filters, year: e.target.value })}
                                             disabled={!filters.course || availableYears.length === 0}
                                         >
-                                            <option value="">All Years</option>
-                                            {availableYears.map(y => (
-                                                <option key={y} value={y}>{y}</option>
-                                            ))}
+                                            {availableYears.length === 0 ? (
+                                                <option value="" disabled>Select Year</option>
+                                            ) : (
+                                                availableYears.map(y => (
+                                                    <option key={y} value={y}>{y}</option>
+                                                ))
+                                            )}
                                         </select>
                                     </div>
                                 )}
@@ -2599,12 +2611,6 @@ const DueReports = () => {
                                             </div>
                                         </label>
                                     </div>
-
-                                    {!filters.year && reportMode !== 'batch' && (
-                                        <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-lg border border-amber-200 font-medium">
-                                            Note: Since no specific year filter is selected, records in the print report will be automatically divided by student year.
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100 bg-white">
