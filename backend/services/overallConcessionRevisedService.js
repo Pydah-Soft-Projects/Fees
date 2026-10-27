@@ -441,9 +441,12 @@ const applyRevisedConcessionTransactions = async ({
   }
 
   let maps = codeMap;
+  let feeHeadDocs = [];
   if (!maps) {
-    const feeHeads = await FeeHead.find({}).lean();
-    maps = buildFeeHeadMaps(feeHeads).codeMap;
+    feeHeadDocs = await FeeHead.find({}).lean();
+    maps = buildFeeHeadMaps(feeHeadDocs).codeMap;
+  } else {
+    feeHeadDocs = await FeeHead.find({}).lean();
   }
 
   const targetEntries = (entries || []).filter(
@@ -541,6 +544,19 @@ const applyRevisedConcessionTransactions = async ({
     const structKey = `${feeHeadId}_${studentYear}_${semester ?? 'null'}`;
     const structure = structureMap[structKey];
     const liveDemand = demandMap[`${feeHeadId}_${studentYear}`] || demandMap[`${feeHeadId}_${String(studentYear)}`];
+
+    // If demand for ANY fee head has been set to 0 (e.g. fee waived, student opted out, or set to 0 via Bulk Upload),
+    // do NOT apply any concession or extra demand. Directly delete any existing DEMD / DECL transactions!
+    if (liveDemand && Number(liveDemand.amount || 0) === 0) {
+      const deletedRes = await Transaction.deleteMany({
+        studentId: admissionNumber,
+        feeHead: feeHeadId,
+        studentYear: String(studentYear),
+        remarks: { $in: [DECLARATION_CONCESSION_REMARKS, 'Extra Demand as per declaration'] }
+      });
+      cancelled += (deletedRes.deletedCount || 0);
+      continue;
+    }
 
     let structureAmount = 0;
     if (structure) {

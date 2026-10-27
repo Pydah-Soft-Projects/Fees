@@ -1694,8 +1694,8 @@ const saveBulkData = async (req, res) => {
                                 upsert: true
                             }
                         });
-                    } else if (d.amount === 0 && (d.isTransportZeroUpdate || isTransportHead)) {
-                        // Update existing Transport Fee demand in MongoDB to 0 if it already exists
+                    } else if (d.amount === 0) {
+                        // Update existing fee demand in MongoDB to 0 if it already exists
                         demandBulkOps.push({
                             updateOne: {
                                 filter: {
@@ -1706,11 +1706,19 @@ const saveBulkData = async (req, res) => {
                                 update: {
                                     $set: {
                                         amount: 0,
-                                        remarks: 'Transport Fee updated to 0 via Bulk Upload'
+                                        remarks: `${d.headName || 'Fee'} updated to 0 via Bulk Upload`
                                     }
                                 },
                                 upsert: false // DO NOT create new demand if it didn't exist before!
                             }
+                        });
+
+                        // Immediately delete any concession declaration (DECL) or extra demand (DEMD) for this 0 demand!
+                        targetsToDelete.push({
+                            studentId: { $in: idsToPurge },
+                            feeHead: headObjId,
+                            studentYear: { $in: [dYear, String(dYear)] },
+                            remarks: { $in: ['Concession as per declaration', 'Extra Demand as per declaration'] }
                         });
                     }
                 });
@@ -1745,6 +1753,14 @@ const saveBulkData = async (req, res) => {
                                 },
                                 upsert: false
                             }
+                        });
+
+                        // Also delete any declaration transactions for these missing previous years updated to 0
+                        targetsToDelete.push({
+                            studentId: { $in: idsToPurge },
+                            feeHead: transportHead._id,
+                            studentYear: { $in: [y, String(y)] },
+                            remarks: { $in: ['Concession as per declaration', 'Extra Demand as per declaration'] }
                         });
                     }
                 }
