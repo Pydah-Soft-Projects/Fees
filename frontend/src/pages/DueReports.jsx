@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './Sidebar';
 import api from '../lib/api';
-import { Filter, Download, ArrowRight, DollarSign, Search, ChevronLeft, ChevronRight, FileText, Printer, X, Users, BookOpen, Percent, Wallet, AlertCircle, Clock } from 'lucide-react';
+import { Filter, Download, ArrowRight, DollarSign, Search, ChevronLeft, ChevronRight, FileText, Printer, X, Users, BookOpen, Percent, Wallet, AlertCircle, Clock, Building2, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { useCampuses, getCollegeNamesForCampuses } from '../hooks/useCampuses';
 import { printHtmlDocument } from '../utils/printService';
@@ -181,6 +181,9 @@ const DueReports = () => {
     const [itemsPerPage, setItemsPerPage] = useState(20);
     const [expandedRow, setExpandedRow] = useState(null);
     const [activeTab, setActiveTab] = useState('report');
+    const [collegeDuesData, setCollegeDuesData] = useState([]);
+    const [collegeDuesLoading, setCollegeDuesLoading] = useState(false);
+    const [collegeSearchTerm, setCollegeSearchTerm] = useState('');
     const [excludeScholarship, setExcludeScholarship] = useState(true);
     const [reportMode, setReportMode] = useState('academicYear'); // 'academicYear' | 'batch'
     const [receiptSettings, setReceiptSettings] = useState(null);
@@ -398,6 +401,228 @@ const DueReports = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const fetchCollegeDuesSummary = async () => {
+        setCollegeDuesLoading(true);
+        try {
+            const resolvedStatus = (filters.studentStatus || []).includes('All') || (filters.studentStatus || []).length === 0
+                ? 'all'
+                : filters.studentStatus.join(',');
+            const response = await api.get('/reports/college-dues-summary', {
+                params: {
+                    batch: topFilters.batch,
+                    campusId: topFilters.campusId,
+                    studentStatus: resolvedStatus
+                }
+            });
+            setCollegeDuesData(Array.isArray(response.data) ? response.data : []);
+        } catch (err) {
+            console.error('Error fetching college dues summary:', err);
+        } finally {
+            setCollegeDuesLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'collegeWise') {
+            fetchCollegeDuesSummary();
+        }
+    }, [activeTab, topFilters.batch, topFilters.campusId, filters.studentStatus]);
+
+    const exportCollegeDuesToExcel = () => {
+        if (!collegeDuesData || collegeDuesData.length === 0) return;
+
+        const dataToExport = collegeDuesData.map((c, idx) => ({
+            'S.No': idx + 1,
+            'College Name': c.college,
+            'Students': c.studentCount || 0,
+            'Academic Total': c.academic?.total || 0,
+            'Academic Collected': c.academic?.paid || 0,
+            'Academic Due': c.academic?.due || 0,
+            'Transport Total': c.transport?.total || 0,
+            'Transport Collected': c.transport?.paid || 0,
+            'Transport Due': c.transport?.due || 0,
+            'Hostel Total': c.hostel?.total || 0,
+            'Hostel Collected': c.hostel?.paid || 0,
+            'Hostel Due': c.hostel?.due || 0,
+            'Overall Total': c.overall?.total || 0,
+            'Overall Collected': c.overall?.paid || 0,
+            'Overall Due': c.overall?.due || 0
+        }));
+
+        const totals = collegeDuesData.reduce((acc, c) => ({
+            students: acc.students + (Number(c.studentCount) || 0),
+            acTotal: acc.acTotal + (Number(c.academic?.total) || 0),
+            acPaid: acc.acPaid + (Number(c.academic?.paid) || 0),
+            acDue: acc.acDue + (Number(c.academic?.due) || 0),
+            trTotal: acc.trTotal + (Number(c.transport?.total) || 0),
+            trPaid: acc.trPaid + (Number(c.transport?.paid) || 0),
+            trDue: acc.trDue + (Number(c.transport?.due) || 0),
+            hoTotal: acc.hoTotal + (Number(c.hostel?.total) || 0),
+            hoPaid: acc.hoPaid + (Number(c.hostel?.paid) || 0),
+            hoDue: acc.hoDue + (Number(c.hostel?.due) || 0),
+            ovTotal: acc.ovTotal + (Number(c.overall?.total) || 0),
+            ovPaid: acc.ovPaid + (Number(c.overall?.paid) || 0),
+            ovDue: acc.ovDue + (Number(c.overall?.due) || 0)
+        }), { students: 0, acTotal: 0, acPaid: 0, acDue: 0, trTotal: 0, trPaid: 0, trDue: 0, hoTotal: 0, hoPaid: 0, hoDue: 0, ovTotal: 0, ovPaid: 0, ovDue: 0 });
+
+        dataToExport.push({
+            'S.No': '',
+            'College Name': 'Grand Total',
+            'Students': totals.students,
+            'Academic Total': totals.acTotal,
+            'Academic Collected': totals.acPaid,
+            'Academic Due': totals.acDue,
+            'Transport Total': totals.trTotal,
+            'Transport Collected': totals.trPaid,
+            'Transport Due': totals.trDue,
+            'Hostel Total': totals.hoTotal,
+            'Hostel Collected': totals.hoPaid,
+            'Hostel Due': totals.hoDue,
+            'Overall Total': totals.ovTotal,
+            'Overall Collected': totals.ovPaid,
+            'Overall Due': totals.ovDue
+        });
+
+        const ws = XLSX.utils.json_to_sheet(dataToExport);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'College Dues Summary');
+        const academicYearStr = topFilters.batch || 'All';
+        XLSX.writeFile(wb, `College_Wise_Dues_${academicYearStr}.xlsx`);
+    };
+
+    const handlePrintCollegeDues = () => {
+        if (!collegeDuesData || collegeDuesData.length === 0) return;
+
+        const printedOn = new Date().toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        });
+
+        const totals = collegeDuesData.reduce((acc, c) => ({
+            students: acc.students + (Number(c.studentCount) || 0),
+            acTotal: acc.acTotal + (Number(c.academic?.total) || 0),
+            acPaid: acc.acPaid + (Number(c.academic?.paid) || 0),
+            acDue: acc.acDue + (Number(c.academic?.due) || 0),
+            trTotal: acc.trTotal + (Number(c.transport?.total) || 0),
+            trPaid: acc.trPaid + (Number(c.transport?.paid) || 0),
+            trDue: acc.trDue + (Number(c.transport?.due) || 0),
+            hoTotal: acc.hoTotal + (Number(c.hostel?.total) || 0),
+            hoPaid: acc.hoPaid + (Number(c.hostel?.paid) || 0),
+            hoDue: acc.hoDue + (Number(c.hostel?.due) || 0),
+            ovTotal: acc.ovTotal + (Number(c.overall?.total) || 0),
+            ovPaid: acc.ovPaid + (Number(c.overall?.paid) || 0),
+            ovDue: acc.ovDue + (Number(c.overall?.due) || 0)
+        }), { students: 0, acTotal: 0, acPaid: 0, acDue: 0, trTotal: 0, trPaid: 0, trDue: 0, hoTotal: 0, hoPaid: 0, hoDue: 0, ovTotal: 0, ovPaid: 0, ovDue: 0 });
+
+        const htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>College-Wise Dues Report - ${topFilters.batch || 'All'}</title>
+                <style>
+                    @page { size: A4 landscape; margin: 8mm; }
+                    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 10px; color: #1e293b; margin: 0; padding: 8px; }
+                    .header { text-align: center; margin-bottom: 10px; border-bottom: 2px solid #0f172a; padding-bottom: 6px; }
+                    .title { font-size: 16px; font-weight: 700; text-transform: uppercase; margin: 0; color: #0f172a; }
+                    .subtitle { font-size: 10.5px; color: #475569; margin-top: 3px; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+                    th, td { border: 1px solid #cbd5e1; padding: 4px 6px; font-size: 9px; }
+                    th { background-color: #f1f5f9; font-weight: 700; text-align: right; }
+                    th.center, td.center { text-align: center; }
+                    th.left, td.left { text-align: left; }
+                    .cat-academic { background-color: #eff6ff; }
+                    .cat-transport { background-color: #fffbeb; }
+                    .cat-hostel { background-color: #faf5ff; }
+                    .cat-overall { background-color: #f8fafc; }
+                    .text-red { color: #dc2626; font-weight: 700; }
+                    .text-green { color: #16a34a; font-weight: 600; }
+                    .grand-total { background-color: #0f172a; color: #ffffff; font-weight: 700; }
+                    .grand-total td { border-color: #0f172a; color: #ffffff; }
+                    .footer { margin-top: 8px; font-size: 8.5px; color: #64748b; display: flex; justify-content: space-between; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="title">College-Wise Dues Summary Report</div>
+                    <div class="subtitle">Academic Year: <strong>${topFilters.batch || 'All'}</strong> | Generated On: ${printedOn} IST</div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th rowspan="2" class="center">#</th>
+                            <th rowspan="2" class="left">College Name</th>
+                            <th rowspan="2" class="center">Students</th>
+                            <th colspan="3" class="center cat-academic">Academic Fees</th>
+                            <th colspan="3" class="center cat-transport">Transport Fees</th>
+                            <th colspan="3" class="center cat-hostel">Hostel Fees</th>
+                            <th colspan="3" class="center cat-overall">Overall Total</th>
+                        </tr>
+                        <tr>
+                            <th class="cat-academic">Total</th>
+                            <th class="cat-academic">Collected</th>
+                            <th class="cat-academic">Due</th>
+                            <th class="cat-transport">Total</th>
+                            <th class="cat-transport">Collected</th>
+                            <th class="cat-transport">Due</th>
+                            <th class="cat-hostel">Total</th>
+                            <th class="cat-hostel">Collected</th>
+                            <th class="cat-hostel">Due</th>
+                            <th class="cat-overall">Total Fee</th>
+                            <th class="cat-overall">Collected</th>
+                            <th class="cat-overall">Total Due</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${collegeDuesData.map((c, idx) => `
+                            <tr>
+                                <td class="center">${idx + 1}</td>
+                                <td class="left"><strong>${c.college}</strong></td>
+                                <td class="center">${c.studentCount}</td>
+                                <td>₹${(c.academic?.total || 0).toLocaleString('en-IN')}</td>
+                                <td class="text-green">₹${(c.academic?.paid || 0).toLocaleString('en-IN')}</td>
+                                <td class="${(c.academic?.due || 0) > 0 ? 'text-red' : ''}">₹${(c.academic?.due || 0).toLocaleString('en-IN')}</td>
+                                <td>₹${(c.transport?.total || 0).toLocaleString('en-IN')}</td>
+                                <td class="text-green">₹${(c.transport?.paid || 0).toLocaleString('en-IN')}</td>
+                                <td class="${(c.transport?.due || 0) > 0 ? 'text-red' : ''}">₹${(c.transport?.due || 0).toLocaleString('en-IN')}</td>
+                                <td>₹${(c.hostel?.total || 0).toLocaleString('en-IN')}</td>
+                                <td class="text-green">₹${(c.hostel?.paid || 0).toLocaleString('en-IN')}</td>
+                                <td class="${(c.hostel?.due || 0) > 0 ? 'text-red' : ''}">₹${(c.hostel?.due || 0).toLocaleString('en-IN')}</td>
+                                <td><strong>₹${(c.overall?.total || 0).toLocaleString('en-IN')}</strong></td>
+                                <td class="text-green"><strong>₹${(c.overall?.paid || 0).toLocaleString('en-IN')}</strong></td>
+                                <td class="${(c.overall?.due || 0) > 0 ? 'text-red' : ''}"><strong>₹${(c.overall?.due || 0).toLocaleString('en-IN')}</strong></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr class="grand-total">
+                            <td colspan="2" class="left"><strong>GRAND TOTAL (${collegeDuesData.length} COLLEGES)</strong></td>
+                            <td class="center">${totals.students}</td>
+                            <td>₹${totals.acTotal.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.acPaid.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.acDue.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.trTotal.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.trPaid.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.trDue.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.hoTotal.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.hoPaid.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.hoDue.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.ovTotal.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.ovPaid.toLocaleString('en-IN')}</td>
+                            <td>₹${totals.ovDue.toLocaleString('en-IN')}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <div class="footer">
+                    <span>PYDAH Educational Academy - Fee Management System</span>
+                    <span>Printed automatically</span>
+                </div>
+            </body>
+            </html>
+        `;
+        printHtmlDocument(htmlContent);
     };
 
     const handleOverallPrint = async (includeDetails = false) => {
@@ -1704,6 +1929,12 @@ const DueReports = () => {
                             Dues Report Grid
                         </button>
                         <button
+                            onClick={() => setActiveTab('collegeWise')}
+                            className={`pb-2.5 pt-2 px-4 font-bold text-xs border-b-2 transition ${activeTab === 'collegeWise' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
+                        >
+                            College Wise Dues
+                        </button>
+                        <button
                             onClick={() => setActiveTab('guide')}
                             className={`pb-2.5 pt-2 px-4 font-bold text-xs border-b-2 transition ${activeTab === 'guide' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'}`}
                         >
@@ -1711,7 +1942,7 @@ const DueReports = () => {
                         </button>
                     </div>
 
-                    {activeTab === 'report' ? (
+                    {activeTab === 'report' && (
                         <div className="max-w-[1600px] mx-auto space-y-4">
 
                          {/* Stats Cards */}
@@ -2553,7 +2784,22 @@ const DueReports = () => {
                             )}
                         </div>
                     </div>
-                    ) : (
+                    )}
+
+                    {activeTab === 'collegeWise' && (
+                        <CollegeWiseDuesView
+                            data={collegeDuesData}
+                            loading={collegeDuesLoading}
+                            onRefresh={fetchCollegeDuesSummary}
+                            academicYear={topFilters.batch}
+                            searchTerm={collegeSearchTerm}
+                            setSearchTerm={setCollegeSearchTerm}
+                            onExportExcel={exportCollegeDuesToExcel}
+                            onPrint={handlePrintCollegeDues}
+                        />
+                    )}
+
+                    {activeTab === 'guide' && (
                         <DueCalculationGuide />
                     )}
 
@@ -2634,6 +2880,360 @@ const DueReports = () => {
                         </div>
                     )}
                 </main>
+            </div>
+        </div>
+    );
+};
+
+const CollegeWiseDuesView = ({
+    data,
+    loading,
+    onRefresh,
+    academicYear,
+    searchTerm,
+    setSearchTerm,
+    onExportExcel,
+    onPrint
+}) => {
+    const filteredColleges = React.useMemo(() => {
+        if (!searchTerm) return data || [];
+        const term = searchTerm.toLowerCase().trim();
+        return (data || []).filter(c => (c.college || '').toLowerCase().includes(term));
+    }, [data, searchTerm]);
+
+    const totals = React.useMemo(() => {
+        return (filteredColleges || []).reduce((acc, c) => ({
+            students: acc.students + (Number(c.studentCount) || 0),
+            academicTotal: acc.academicTotal + (Number(c.academic?.total) || 0),
+            academicPaid: acc.academicPaid + (Number(c.academic?.paid) || 0),
+            academicDue: acc.academicDue + (Number(c.academic?.due) || 0),
+            transportTotal: acc.transportTotal + (Number(c.transport?.total) || 0),
+            transportPaid: acc.transportPaid + (Number(c.transport?.paid) || 0),
+            transportDue: acc.transportDue + (Number(c.transport?.due) || 0),
+            hostelTotal: acc.hostelTotal + (Number(c.hostel?.total) || 0),
+            hostelPaid: acc.hostelPaid + (Number(c.hostel?.paid) || 0),
+            hostelDue: acc.hostelDue + (Number(c.hostel?.due) || 0),
+            overallTotal: acc.overallTotal + (Number(c.overall?.total) || 0),
+            overallPaid: acc.overallPaid + (Number(c.overall?.paid) || 0),
+            overallDue: acc.overallDue + (Number(c.overall?.due) || 0)
+        }), {
+            students: 0,
+            academicTotal: 0, academicPaid: 0, academicDue: 0,
+            transportTotal: 0, transportPaid: 0, transportDue: 0,
+            hostelTotal: 0, hostelPaid: 0, hostelDue: 0,
+            overallTotal: 0, overallPaid: 0, overallDue: 0
+        });
+    }, [filteredColleges]);
+
+    return (
+        <div className="max-w-[1600px] mx-auto space-y-5 animate-in fade-in duration-200">
+            {/* KPI Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Academic Fees Card */}
+                <div className="bg-white border border-blue-100 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-blue-50 text-blue-700 rounded-lg">
+                                <BookOpen size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Academic Fees</span>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Total Demand:</span>
+                            <span className="font-bold text-gray-900">₹{totals.academicTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Collected:</span>
+                            <span className="font-bold text-emerald-600">₹{totals.academicPaid.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-1 border-t border-gray-100">
+                            <span className="text-gray-700 font-bold">Total Due:</span>
+                            <span className={`font-extrabold ${totals.academicDue > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                ₹{totals.academicDue.toLocaleString('en-IN')}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Transport Fees Card */}
+                <div className="bg-white border border-amber-100 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-amber-50 text-amber-700 rounded-lg">
+                                <Clock size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Transport Fees</span>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Total Demand:</span>
+                            <span className="font-bold text-gray-900">₹{totals.transportTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Collected:</span>
+                            <span className="font-bold text-emerald-600">₹{totals.transportPaid.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-1 border-t border-gray-100">
+                            <span className="text-gray-700 font-bold">Total Due:</span>
+                            <span className={`font-extrabold ${totals.transportDue > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                ₹{totals.transportDue.toLocaleString('en-IN')}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Hostel Fees Card */}
+                <div className="bg-white border border-purple-100 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-purple-50 text-purple-700 rounded-lg">
+                                <Building2 size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Hostel Fees</span>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Total Demand:</span>
+                            <span className="font-bold text-gray-900">₹{totals.hostelTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                            <span className="text-gray-500 font-medium">Collected:</span>
+                            <span className="font-bold text-emerald-600">₹{totals.hostelPaid.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-1 border-t border-gray-100">
+                            <span className="text-gray-700 font-bold">Total Due:</span>
+                            <span className={`font-extrabold ${totals.hostelDue > 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                                ₹{totals.hostelDue.toLocaleString('en-IN')}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Overall Summary Card */}
+                <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="p-2 bg-white/10 text-white rounded-lg">
+                                <Wallet size={16} />
+                            </div>
+                            <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Overall Dues</span>
+                        </div>
+                        <span className="text-[11px] font-semibold px-2 py-0.5 bg-blue-500/30 text-blue-200 rounded-full border border-blue-400/30">
+                            {totals.students} Students
+                        </span>
+                    </div>
+                    <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between text-xs text-slate-300">
+                            <span>Total Fee:</span>
+                            <span className="font-bold text-white">₹{totals.overallTotal.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-slate-300">
+                            <span>Collected:</span>
+                            <span className="font-bold text-emerald-300">₹{totals.overallPaid.toLocaleString('en-IN')}</span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-1 border-t border-white/10 text-white">
+                            <span className="font-bold">Total Due:</span>
+                            <span className="font-extrabold text-red-400 text-sm">
+                                ₹{totals.overallDue.toLocaleString('en-IN')}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Table Container Card */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden font-sans">
+                {/* Header Bar */}
+                <div className="p-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50/50">
+                    <div>
+                        <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                            <Building2 size={16} className="text-blue-600" />
+                            College-Wise Dues Breakdown
+                        </h2>
+                        <p className="text-[11px] text-gray-500 mt-0.5 font-medium">
+                            Academic Year: <span className="font-bold text-blue-600">{academicYear || 'All Academic Years'}</span>
+                            {' • '} Showing {filteredColleges.length} {filteredColleges.length === 1 ? 'College' : 'Colleges'}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* Search Input */}
+                        <div className="relative">
+                            <Search className="absolute left-3 top-2.5 text-gray-400" size={13} />
+                            <input
+                                type="text"
+                                placeholder="Search college name..."
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-1 focus:ring-blue-500 focus:border-blue-500 w-52 bg-white"
+                            />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Refresh Button */}
+                        <button
+                            type="button"
+                            onClick={onRefresh}
+                            disabled={loading}
+                            className="p-1.5 text-xs text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded-lg border border-gray-200 transition disabled:opacity-50"
+                            title="Refresh Summary"
+                        >
+                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                        </button>
+
+                        {/* Export to Excel */}
+                        <button
+                            type="button"
+                            onClick={onExportExcel}
+                            disabled={loading || filteredColleges.length === 0}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs px-3 py-1.5 shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            <Download size={13} /> Export Excel
+                        </button>
+
+                        {/* Print Report */}
+                        <button
+                            type="button"
+                            onClick={onPrint}
+                            disabled={loading || filteredColleges.length === 0}
+                            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs px-3 py-1.5 shadow-sm transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                            <Printer size={13} /> Print Summary
+                        </button>
+                    </div>
+                </div>
+
+                {/* The Main College-Wise Table */}
+                <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-320px)] min-h-[420px] scrollbar-thin">
+                    <table className="w-full text-xs text-left border-collapse">
+                        <thead className="sticky top-0 z-20 bg-slate-100 shadow-sm border-b border-gray-200">
+                            {/* Group Header Row */}
+                            <tr className="text-gray-700 font-bold border-b border-gray-200">
+                                <th rowSpan={2} className="p-3 text-center w-12 bg-gray-50 border-r border-gray-200">#</th>
+                                <th rowSpan={2} className="p-3 text-left min-w-[220px] bg-gray-50 border-r border-gray-200">College Name</th>
+                                <th rowSpan={2} className="p-3 text-center w-24 bg-gray-50 border-r border-gray-200">Students</th>
+                                <th colSpan={3} className="p-2.5 text-center bg-blue-50/80 text-blue-900 border-r border-blue-200 uppercase tracking-wider text-[11px]">Academic Fees</th>
+                                <th colSpan={3} className="p-2.5 text-center bg-amber-50/80 text-amber-900 border-r border-amber-200 uppercase tracking-wider text-[11px]">Transport Fees</th>
+                                <th colSpan={3} className="p-2.5 text-center bg-purple-50/80 text-purple-900 border-r border-purple-200 uppercase tracking-wider text-[11px]">Hostel Fees</th>
+                                <th colSpan={3} className="p-2.5 text-center bg-slate-100 text-gray-900 uppercase tracking-wider text-[11px]">Overall Total</th>
+                            </tr>
+                            {/* Sub-Column Header Row */}
+                            <tr className="text-gray-600 font-semibold border-b border-gray-200 text-[11px]">
+                                <th className="p-2 text-right bg-blue-50/40 min-w-[95px]">Total</th>
+                                <th className="p-2 text-right bg-blue-50/40 min-w-[95px] text-emerald-700">Collected</th>
+                                <th className="p-2 text-right bg-blue-50/40 min-w-[95px] text-red-700 border-r border-blue-200">Due</th>
+
+                                <th className="p-2 text-right bg-amber-50/40 min-w-[95px]">Total</th>
+                                <th className="p-2 text-right bg-amber-50/40 min-w-[95px] text-emerald-700">Collected</th>
+                                <th className="p-2 text-right bg-amber-50/40 min-w-[95px] text-red-700 border-r border-amber-200">Due</th>
+
+                                <th className="p-2 text-right bg-purple-50/40 min-w-[95px]">Total</th>
+                                <th className="p-2 text-right bg-purple-50/40 min-w-[95px] text-emerald-700">Collected</th>
+                                <th className="p-2 text-right bg-purple-50/40 min-w-[95px] text-red-700 border-r border-purple-200">Due</th>
+
+                                <th className="p-2 text-right bg-gray-50 min-w-[105px]">Total Fee</th>
+                                <th className="p-2 text-right bg-gray-50 min-w-[105px] text-emerald-700">Collected</th>
+                                <th className="p-2 text-right bg-gray-50 min-w-[105px] text-red-700 font-bold">Total Due</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={15} className="py-20 text-center text-gray-500">
+                                        <div className="flex flex-col items-center justify-center gap-3">
+                                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                                            <p className="text-xs font-semibold">Calculating college dues for {academicYear || 'selected academic year'}...</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ) : filteredColleges.length === 0 ? (
+                                <tr>
+                                    <td colSpan={15} className="py-14 text-center text-gray-400 italic">
+                                        No college fee records found for the selected academic year.
+                                    </td>
+                                </tr>
+                            ) : (
+                                filteredColleges.map((col, idx) => (
+                                    <tr key={col.college || idx} className="hover:bg-blue-50/25 transition-colors">
+                                        <td className="p-3 text-center text-gray-500 font-medium border-r border-gray-100">{idx + 1}</td>
+                                        <td className="p-3 font-bold text-gray-900 border-r border-gray-100">
+                                            {col.college}
+                                        </td>
+                                        <td className="p-3 text-center border-r border-gray-100">
+                                            <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-bold text-[11px]">
+                                                {col.studentCount || 0}
+                                            </span>
+                                        </td>
+                                        {/* Academic */}
+                                        <td className="p-2.5 text-right font-medium text-gray-700">₹{(col.academic?.total || 0).toLocaleString('en-IN')}</td>
+                                        <td className="p-2.5 text-right font-semibold text-emerald-600">₹{(col.academic?.paid || 0).toLocaleString('en-IN')}</td>
+                                        <td className={`p-2.5 text-right border-r border-gray-100 ${(col.academic?.due || 0) > 0 ? 'font-bold text-red-600' : 'text-gray-400'}`}>
+                                            ₹{(col.academic?.due || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        {/* Transport */}
+                                        <td className="p-2.5 text-right font-medium text-gray-700">₹{(col.transport?.total || 0).toLocaleString('en-IN')}</td>
+                                        <td className="p-2.5 text-right font-semibold text-emerald-600">₹{(col.transport?.paid || 0).toLocaleString('en-IN')}</td>
+                                        <td className={`p-2.5 text-right border-r border-gray-100 ${(col.transport?.due || 0) > 0 ? 'font-bold text-red-600' : 'text-gray-400'}`}>
+                                            ₹{(col.transport?.due || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        {/* Hostel */}
+                                        <td className="p-2.5 text-right font-medium text-gray-700">₹{(col.hostel?.total || 0).toLocaleString('en-IN')}</td>
+                                        <td className="p-2.5 text-right font-semibold text-emerald-600">₹{(col.hostel?.paid || 0).toLocaleString('en-IN')}</td>
+                                        <td className={`p-2.5 text-right border-r border-gray-100 ${(col.hostel?.due || 0) > 0 ? 'font-bold text-red-600' : 'text-gray-400'}`}>
+                                            ₹{(col.hostel?.due || 0).toLocaleString('en-IN')}
+                                        </td>
+                                        {/* Overall */}
+                                        <td className="p-2.5 text-right font-bold text-gray-900">₹{(col.overall?.total || 0).toLocaleString('en-IN')}</td>
+                                        <td className="p-2.5 text-right font-bold text-emerald-700">₹{(col.overall?.paid || 0).toLocaleString('en-IN')}</td>
+                                        <td className={`p-2.5 text-right ${(col.overall?.due || 0) > 0 ? 'font-extrabold text-red-600' : 'text-gray-400'}`}>
+                                            ₹{(col.overall?.due || 0).toLocaleString('en-IN')}
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                        {/* Sticky Grand Total Footer */}
+                        {!loading && filteredColleges.length > 0 && (
+                            <tfoot className="sticky bottom-0 z-20 bg-slate-900 text-white font-bold text-xs shadow-lg">
+                                <tr>
+                                    <td colSpan={2} className="p-3 text-left pl-4 font-extrabold uppercase tracking-wider text-slate-100">
+                                        Grand Total ({filteredColleges.length} Colleges)
+                                    </td>
+                                    <td className="p-3 text-center text-blue-300 font-extrabold">
+                                        {totals.students}
+                                    </td>
+                                    {/* Academic */}
+                                    <td className="p-2.5 text-right text-slate-200">₹{totals.academicTotal.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-emerald-400">₹{totals.academicPaid.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-red-400 font-extrabold border-r border-slate-700">₹{totals.academicDue.toLocaleString('en-IN')}</td>
+                                    {/* Transport */}
+                                    <td className="p-2.5 text-right text-slate-200">₹{totals.transportTotal.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-emerald-400">₹{totals.transportPaid.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-red-400 font-extrabold border-r border-slate-700">₹{totals.transportDue.toLocaleString('en-IN')}</td>
+                                    {/* Hostel */}
+                                    <td className="p-2.5 text-right text-slate-200">₹{totals.hostelTotal.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-emerald-400">₹{totals.hostelPaid.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-red-400 font-extrabold border-r border-slate-700">₹{totals.hostelDue.toLocaleString('en-IN')}</td>
+                                    {/* Overall */}
+                                    <td className="p-2.5 text-right text-white font-extrabold">₹{totals.overallTotal.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-emerald-300 font-extrabold">₹{totals.overallPaid.toLocaleString('en-IN')}</td>
+                                    <td className="p-2.5 text-right text-red-400 font-extrabold text-sm">₹{totals.overallDue.toLocaleString('en-IN')}</td>
+                                </tr>
+                            </tfoot>
+                        )}
+                    </table>
+                </div>
             </div>
         </div>
     );

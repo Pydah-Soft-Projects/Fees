@@ -1373,10 +1373,10 @@ const getTransactionReports = async (req, res) => {
     }
 };
 
-const getDueReports = async (req, res) => {
+const buildDueReportData = async (queryParams = {}, user) => {
     try {
-        const { college, course, branch, batch, search, campusId, year, quota, studentStatus, reportType } = req.query;
-        const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
+        const { college, course, branch, batch, search, campusId, year, quota, studentStatus, reportType } = queryParams;
+        const allowedColleges = await collegeScope.getEffectiveCollegeNames(user, campusId);
 
         // 1. Build SQL Query for Students
         let sqlQuery = `SELECT id, admission_number, student_name, course, branch, current_year, student_mobile, pin_no, college, stud_type, batch, current_semester, is_scholar_applicable, student_status FROM students WHERE 1=1`;
@@ -1396,7 +1396,7 @@ const getDueReports = async (req, res) => {
 
         if (college) {
             if (allowedColleges && !allowedColleges.includes(college)) {
-                return res.json([]);
+                return [];
             }
             sqlQuery += ` AND college = ?`;
             params.push(college);
@@ -1499,7 +1499,7 @@ const getDueReports = async (req, res) => {
         const [students] = await db.query(sqlQuery, params);
 
         if (!students || students.length === 0) {
-            return res.json([]);
+            return [];
         }
 
         const studentMap = {};
@@ -2387,10 +2387,94 @@ const getDueReports = async (req, res) => {
             return pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
         });
 
+        return reportData;
+    } catch (error) {
+        console.error('buildDueReportData Error:', error);
+        throw error;
+    }
+};
+
+const getDueReports = async (req, res) => {
+    try {
+        const reportData = await buildDueReportData(req.query, req.user);
         res.json(reportData);
-} catch (error) {
+    } catch (error) {
         console.error('Due Report Error:', error);
         res.status(500).json({ message: 'Error generating due report' });
+    }
+};
+
+const getCollegeDuesSummary = async (req, res) => {
+    try {
+        const { batch, campusId, studentStatus } = req.query;
+        const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
+
+        const reportData = await buildDueReportData({
+            batch: batch || '',
+            campusId: campusId || 'all',
+            studentStatus: studentStatus || 'Regular',
+            reportType: 'academicYear'
+        }, req.user);
+
+        const collegeMap = {};
+        if (allowedColleges && allowedColleges.length > 0) {
+            allowedColleges.forEach(colName => {
+                collegeMap[colName] = {
+                    college: colName,
+                    studentCount: 0,
+                    academic: { total: 0, paid: 0, due: 0 },
+                    transport: { total: 0, paid: 0, due: 0 },
+                    hostel: { total: 0, paid: 0, due: 0 },
+                    overall: { total: 0, paid: 0, due: 0 }
+                };
+            });
+        }
+
+        reportData.forEach(student => {
+            const colName = student.college || 'Unknown';
+            if (!collegeMap[colName]) {
+                collegeMap[colName] = {
+                    college: colName,
+                    studentCount: 0,
+                    academic: { total: 0, paid: 0, due: 0 },
+                    transport: { total: 0, paid: 0, due: 0 },
+                    hostel: { total: 0, paid: 0, due: 0 },
+                    overall: { total: 0, paid: 0, due: 0 }
+                };
+            }
+            const cObj = collegeMap[colName];
+            cObj.studentCount += 1;
+
+            const ac = student.groupedFeeDetails?.academic;
+            const tr = student.groupedFeeDetails?.transport;
+            const ho = student.groupedFeeDetails?.hostel;
+
+            if (ac) {
+                cObj.academic.total += Number(ac.total || 0);
+                cObj.academic.paid += Number(ac.paid || 0);
+                cObj.academic.due += (Number(ac.due || 0) + Number(ac.previousDue || 0));
+            }
+            if (tr) {
+                cObj.transport.total += Number(tr.total || 0);
+                cObj.transport.paid += Number(tr.paid || 0);
+                cObj.transport.due += (Number(tr.due || 0) + Number(tr.previousDue || 0));
+            }
+            if (ho) {
+                cObj.hostel.total += Number(ho.total || 0);
+                cObj.hostel.paid += Number(ho.paid || 0);
+                cObj.hostel.due += (Number(ho.due || 0) + Number(ho.previousDue || 0));
+            }
+
+            cObj.overall.total += Number(student.totalFee || 0);
+            cObj.overall.paid += Number(student.paidAmount || 0);
+            cObj.overall.due += Number(student.dueAmount || 0);
+        });
+
+        const collegeList = Object.values(collegeMap).sort((a, b) => a.college.localeCompare(b.college));
+        res.json(collegeList);
+    } catch (error) {
+        console.error('College Dues Summary Error:', error);
+        res.status(500).json({ message: 'Error generating college dues summary' });
     }
 };
 
@@ -2702,5 +2786,6 @@ const getDashboardStats = async (req, res) => {
 module.exports = {
     getTransactionReports,
     getDueReports,
+    getCollegeDuesSummary,
     getDashboardStats
 };
