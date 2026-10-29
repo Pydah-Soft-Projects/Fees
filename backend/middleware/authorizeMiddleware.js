@@ -16,6 +16,10 @@ const API_ACCESS_RULES = [
     permissions: ['/due-reports'],
   },
   {
+    prefix: '/api/reports/college-dues-summary',
+    permissions: ['/due-reports', '/reports'],
+  },
+  {
     prefix: '/api/users',
     permissions: ['/user-management'],
   },
