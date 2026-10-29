@@ -5,6 +5,7 @@ const FeeGroup = require('../models/FeeGroup');
 const Setting = require('../models/Setting');
 const ReceiptSequence = require('../models/ReceiptSequence');
 const db = require('../config/sqlDb');
+const receiptService = require('../services/receiptService');
 const collegeScope = require('../utils/collegeScope');
 const { validateProceedingPayment, syncProceedingStudentTxnStatus, syncProceedingCompletionStatus } = require('../utils/proceedingDemand');
 
@@ -295,7 +296,8 @@ const addTransaction = async (req, res) => {
        for (const [groupCode, items] of Object.entries(groupedItems)) {
          // Generate a shared receipt number for this group subset
          const firstFeeHeadId = sanitizeObjectId(items[0].feeHeadId);
-         const receiptNumber = await generateReceiptNumber(firstFeeHeadId);
+         const providedReceiptNumber = items.find(i => i.receiptNumber)?.receiptNumber || req.body.receiptNumber;
+         const receiptNumber = providedReceiptNumber || await generateReceiptNumber(firstFeeHeadId);
 
          for (const item of items) {
            const timestamps = resolveCollectionTimestamps(req, item.paymentDate);
@@ -369,7 +371,7 @@ const addTransaction = async (req, res) => {
       finalPaymentMode = 'Waiver';
     }
 
-    const receiptNumber = await generateReceiptNumber(sanitizeObjectId(feeHeadId));
+    const receiptNumber = req.body.receiptNumber || await generateReceiptNumber(sanitizeObjectId(feeHeadId));
     const timestamps = resolveCollectionTimestamps(req, paymentDate);
     const master = await resolveStudentMaster(studentId, req.body);
 
@@ -644,6 +646,92 @@ const previewSequence = async (req, res) => {
     });
   } catch (error) {
     console.error("Error previewing sequence:", error);
+    return res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+// @desc    Get Next Receipt Number (Allocates and increments, or previews sequence)
+// @route   POST /api/transactions/next-receipt
+// @route   GET  /api/transactions/next-receipt
+// @route   POST /api/public/transactions/next-receipt
+// @route   GET  /api/public/transactions/next-receipt
+const getNextReceiptNumber = async (req, res) => {
+  try {
+    const params = req.method === 'GET' ? req.query : (req.body || {});
+    const {
+      studentId,
+      admissionNumber,
+      admissionNo,
+      collegeCode,
+      courseCode,
+      feeHeadId,
+      feeHeadIds,
+      groupCode,
+      date,
+      allocate,
+      preview
+    } = params;
+
+    const targetStudentId = studentId || admissionNumber || admissionNo;
+    // Default to allocate: true unless preview === true or allocate === false
+    const shouldAllocate = (preview === true || preview === 'true' || allocate === false || allocate === 'false') ? false : true;
+
+    // Support batch generation by feeHeadIds if an array is passed
+    if (feeHeadIds && Array.isArray(feeHeadIds) && feeHeadIds.length > 0) {
+      const distinctGroupReceipts = [];
+      const distinctGroups = new Map();
+
+      for (const fhId of feeHeadIds) {
+        const resolvedGroup = await receiptService.resolveGroupCode(fhId);
+        if (!distinctGroups.has(resolvedGroup)) {
+          distinctGroups.set(resolvedGroup, []);
+        }
+        distinctGroups.get(resolvedGroup).push(fhId);
+      }
+
+      for (const [grpCode, headIds] of distinctGroups.entries()) {
+        const result = await receiptService.generateReceiptNumber({
+          studentId: targetStudentId,
+          collegeCode,
+          courseCode,
+          feeHeadId: headIds[0],
+          groupCode: grpCode !== 'GEN' ? grpCode : groupCode,
+          date,
+          allocate: shouldAllocate
+        });
+
+        distinctGroupReceipts.push({
+          groupCode: grpCode,
+          feeHeadIds: headIds,
+          ...result
+        });
+      }
+
+      return res.json({
+        success: true,
+        allocated: shouldAllocate,
+        receiptNumber: distinctGroupReceipts[0]?.receiptNumber,
+        receipts: distinctGroupReceipts
+      });
+    }
+
+    // Single receipt number generation
+    const result = await receiptService.generateReceiptNumber({
+      studentId: targetStudentId,
+      collegeCode,
+      courseCode,
+      feeHeadId,
+      groupCode,
+      date,
+      allocate: shouldAllocate
+    });
+
+    return res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("Error generating next receipt number:", error);
     return res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
@@ -1230,6 +1318,7 @@ module.exports = {
   addTransaction,
   getStudentTransactions,
   previewSequence,
+  getNextReceiptNumber,
   updateTransactionPaymentMode,
   getRecentTransactions,
   deleteTransaction,

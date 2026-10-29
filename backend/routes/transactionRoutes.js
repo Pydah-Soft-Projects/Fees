@@ -4,6 +4,7 @@ const {
   addTransaction,
   getStudentTransactions,
   previewSequence,
+  getNextReceiptNumber,
   updateTransactionPaymentMode,
   getRecentTransactions,
   deleteTransaction,
@@ -34,6 +35,10 @@ router.route('/:id/transfer')
 router.route('/:id')
   .put(updateTransactionPaymentMode)
   .delete(deleteTransaction);
+
+router.route('/next-receipt')
+  .get(getNextReceiptNumber)
+  .post(getNextReceiptNumber);
 
 router.route('/preview-sequence')
   .post(previewSequence);

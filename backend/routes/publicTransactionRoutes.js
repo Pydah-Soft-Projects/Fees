@@ -2,6 +2,14 @@ const express = require('express');
 const router = express.Router();
 const Transaction = require('../models/Transaction');
 const db = require('../config/sqlDb');
+const { getNextReceiptNumber } = require('../controllers/transactionController');
+
+// @desc    Get Next Receipt Number for external systems (e.g. Admission, Hostel, Transport)
+// @route   POST /api/public/transactions/next-receipt
+// @route   GET  /api/public/transactions/next-receipt
+router.route('/next-receipt')
+  .get(getNextReceiptNumber)
+  .post(getNextReceiptNumber);
 
 // @desc    Get Receipt Details by Receipt Number (Public verification endpoint)
 // @route   GET /api/public/transactions/receipt/:receiptNumber
