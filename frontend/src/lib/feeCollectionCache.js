@@ -23,7 +23,7 @@ let inflight = {
 
 export const getFeeCollectionCache = (key) => {
   if (!cache.key || cache.key !== key) return null;
-  if (!cache.students || !Array.isArray(cache.students)) return null;
+  if (!cache.students || !Array.isArray(cache.students) || cache.students.length === 0) return null;
   if (Date.now() - cache.fetchedAt > TTL_MS) return null;
   return {
     students: cache.students,

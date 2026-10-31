@@ -114,7 +114,28 @@ const findMatchingCourses = async (identifier, optionalCollegeId = null) => {
     const str = String(identifier).trim();
     if (!str) return [];
 
-    // Handle delimiter-separated multiple courses (comma or double-pipe)
+    // 1. Direct numeric ID match
+    if (/^\d+$/.test(str)) {
+        const numId = Number(str);
+        const match = allCourses.find((c) => c.id === numId);
+        return match ? [match] : [];
+    }
+
+    // 2. Pipe-separated 'College|Course' match (e.g. "Pydah Polytechnic of Agriculture, Patavala|DAP-PTV")
+    // College name may contain commas, so match this BEFORE splitting by comma!
+    if (str.includes('|') && !str.includes('||')) {
+        const [collegePart, coursePart] = str.split('|').map((s) => s.trim());
+        const normCollege = normalizeString(collegePart);
+        const normCourse = normalizeString(coursePart);
+        const matched = allCourses.filter((c) => {
+            const matchCollege = normalizeString(c.college_name) === normCollege || normalizeString(c.college_code) === normCollege;
+            const matchCourse = normalizeString(c.name) === normCourse || normalizeString(c.code) === normCourse || c.allNames.some((n) => normalizeString(n) === normCourse);
+            return matchCollege && matchCourse;
+        });
+        if (matched.length > 0) return matched;
+    }
+
+    // 3. Handle delimiter-separated multiple courses (comma or double-pipe)
     if (str.includes('||') || str.includes(',')) {
         const delimiter = str.includes('||') ? '||' : ',';
         const parts = str.split(delimiter).map((s) => s.trim()).filter(Boolean);
@@ -132,25 +153,6 @@ const findMatchingCourses = async (identifier, optionalCollegeId = null) => {
             }
             return results;
         }
-    }
-
-    // 1. Direct numeric ID match
-    if (/^\d+$/.test(str)) {
-        const numId = Number(str);
-        const match = allCourses.find((c) => c.id === numId);
-        return match ? [match] : [];
-    }
-
-    // 2. Pipe-separated 'College|Course' match
-    if (str.includes('|')) {
-        const [collegePart, coursePart] = str.split('|').map((s) => s.trim());
-        const normCollege = normalizeString(collegePart);
-        const normCourse = normalizeString(coursePart);
-        return allCourses.filter((c) => {
-            const matchCollege = normalizeString(c.college_name) === normCollege || normalizeString(c.college_code) === normCollege;
-            const matchCourse = normalizeString(c.name) === normCourse || normalizeString(c.code) === normCourse || c.allNames.some((n) => normalizeString(n) === normCourse);
-            return matchCollege && matchCourse;
-        });
     }
 
     // 3. Match by course name, code, or known student variant
