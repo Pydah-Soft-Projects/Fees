@@ -7,7 +7,7 @@ const courseScope = require('../utils/courseScope');
 // @route   GET /api/students
 const getStudents = async (req, res) => {
   try {
-    let { college, collegeId, college_id, course, courseId, course_id, branch, batch, campusId } = req.query;
+    let { college, collegeId, college_id, course, courseId, course_id, branch, batch, campusId, search, admission_number, pin_no } = req.query;
 
     const collegeResult = await collegeScope.resolveCollegeScope({
       user: req.user,
@@ -67,6 +67,19 @@ const getStudents = async (req, res) => {
     if (batch) {
       conditions.push('batch = ?');
       params.push(batch);
+    }
+    if (admission_number) {
+      conditions.push('(admission_number = ? OR pin_no = ?)');
+      params.push(admission_number, admission_number);
+    }
+    if (pin_no) {
+      conditions.push('pin_no = ?');
+      params.push(pin_no);
+    }
+    if (search) {
+      conditions.push('(student_name LIKE ? OR admission_number LIKE ? OR pin_no LIKE ? OR student_mobile LIKE ?)');
+      const searchPattern = `%${search}%`;
+      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
     }
 
     if (conditions.length > 0) {

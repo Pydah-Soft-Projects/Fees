@@ -89,13 +89,50 @@ const getCanonicalCourses = async (forceRefresh = false) => {
 };
 
 /**
- * Finds matching course records given an identifier (number ID, string name, code, or 'College|Course').
+ * Finds matching course records given an identifier (number ID, string name, code, 'College|Course', or array/comma-separated list).
  */
 const findMatchingCourses = async (identifier, optionalCollegeId = null) => {
     if (!identifier && identifier !== 0) return [];
+
+    // Handle array of identifiers
+    if (Array.isArray(identifier)) {
+        const results = [];
+        const seenIds = new Set();
+        for (const item of identifier) {
+            const matches = await findMatchingCourses(item, optionalCollegeId);
+            for (const m of matches) {
+                if (!seenIds.has(m.id)) {
+                    seenIds.add(m.id);
+                    results.push(m);
+                }
+            }
+        }
+        return results;
+    }
+
     const allCourses = await getCanonicalCourses();
     const str = String(identifier).trim();
     if (!str) return [];
+
+    // Handle delimiter-separated multiple courses (comma or double-pipe)
+    if (str.includes('||') || str.includes(',')) {
+        const delimiter = str.includes('||') ? '||' : ',';
+        const parts = str.split(delimiter).map((s) => s.trim()).filter(Boolean);
+        if (parts.length > 1) {
+            const results = [];
+            const seenIds = new Set();
+            for (const p of parts) {
+                const matches = await findMatchingCourses(p, optionalCollegeId);
+                for (const m of matches) {
+                    if (!seenIds.has(m.id)) {
+                        seenIds.add(m.id);
+                        results.push(m);
+                    }
+                }
+            }
+            return results;
+        }
+    }
 
     // 1. Direct numeric ID match
     if (/^\d+$/.test(str)) {
