@@ -3,8 +3,10 @@ const StudentFee = require('../models/StudentFee');
 const mongoose = require('mongoose');
 const db = require('../config/sqlDb');
 const collegeScope = require('../utils/collegeScope');
+const courseScope = require('../utils/courseScope');
 const { buildReportDateFilter, applyReportDateToMatch, buildIstDayBounds, buildCollectionDateMatch } = require('../utils/reportDateFilter');
 
+const FeeHead = require('../models/FeeHead');
 const FeeStructure = require('../models/FeeStructure');
 const Setting = require('../models/Setting');
 const ServiceLateFeeConfig = require('../models/ServiceLateFeeConfig');
@@ -1375,11 +1377,32 @@ const getTransactionReports = async (req, res) => {
 
 const buildDueReportData = async (queryParams = {}, user) => {
     try {
-        const { college, course, branch, batch, search, campusId, year, quota, studentStatus, reportType } = queryParams;
-        const allowedColleges = await collegeScope.getEffectiveCollegeNames(user, campusId);
+        const { college, collegeId, college_id, course, courseId, course_id, branch, batch, search, campusId, year, quota, studentStatus, reportType } = queryParams;
+
+        // Dynamic college scoping (supports college name or numeric college_id)
+        const collegeResult = await collegeScope.resolveCollegeScope({
+            user,
+            college,
+            collegeId: collegeId || college_id,
+            campusId
+        });
+        if (!collegeResult.allowed) {
+            return [];
+        }
+
+        // Dynamic course scoping (supports course name or numeric course_id)
+        const courseResult = await courseScope.resolveCourseScope({
+            user,
+            course,
+            courseId: courseId || course_id,
+            collegeIds: collegeResult.collegeIds
+        });
+        if (!courseResult.allowed) {
+            return [];
+        }
 
         // 1. Build SQL Query for Students
-        let sqlQuery = `SELECT id, admission_number, student_name, course, branch, current_year, student_mobile, pin_no, college, stud_type, batch, current_semester, is_scholar_applicable, student_status FROM students WHERE 1=1`;
+        let sqlQuery = `SELECT id, admission_number, student_name, course, branch, current_year, student_mobile, pin_no, college, stud_type, batch, current_semester, is_scholar_applicable, student_status, college_id, course_id FROM students WHERE 1=1`;
         const params = [];
 
         // Filter by student status
@@ -1394,19 +1417,14 @@ const buildDueReportData = async (queryParams = {}, user) => {
             sqlQuery += ` AND LOWER(student_status) = 'regular'`;
         }
 
-        if (college) {
-            if (allowedColleges && !allowedColleges.includes(college)) {
-                return [];
-            }
-            sqlQuery += ` AND college = ?`;
-            params.push(college);
-        } else if (allowedColleges && allowedColleges.length > 0) {
-            sqlQuery += ` AND college IN (${allowedColleges.map(() => '?').join(',')})`;
-            params.push(...allowedColleges);
+        if (collegeResult.collegeIds.length > 0) {
+            sqlQuery += ` AND (college_id IN (${collegeResult.collegeIds.map(() => '?').join(',')}) OR college IN (${collegeResult.collegeNames.map(() => '?').join(',')}))`;
+            params.push(...collegeResult.collegeIds, ...collegeResult.collegeNames);
         }
-        if (course) {
-            sqlQuery += ` AND course = ?`;
-            params.push(course);
+
+        if (courseResult.courseIds.length > 0) {
+            sqlQuery += ` AND (course_id IN (${courseResult.courseIds.map(() => '?').join(',')}) OR course IN (${courseResult.courseNames.map(() => '?').join(',')}))`;
+            params.push(...courseResult.courseIds, ...courseResult.courseNames);
         }
         if (branch) {
             const branchList = Array.isArray(branch) ? branch : String(branch).split(',').map(s => s.trim()).filter(Boolean);
@@ -1554,7 +1572,7 @@ const buildDueReportData = async (queryParams = {}, user) => {
             }).lean(),
             StudentFee.find({ studentId: { $in: allIdentifiers } }).populate('feeHead', 'name code').lean(),
             Transaction.find({ studentId: { $in: allIdentifiers }, status: { $ne: 'cancelled' } }).lean(),
-            mongoose.model('FeeHead').find().lean(),
+            FeeHead.find().lean(),
             ServiceLateFeeConfig.find({ isActive: { $ne: false } }).lean(),
             DefaultLateFeeConfig.find({ isActive: true }).lean(),
             Setting.findOne().lean()
@@ -2407,7 +2425,11 @@ const getDueReports = async (req, res) => {
 const getCollegeDuesSummary = async (req, res) => {
     try {
         const { batch, campusId, studentStatus } = req.query;
-        const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
+        const collegeResult = await collegeScope.resolveCollegeScope({
+            user: req.user,
+            campusId
+        });
+        const allowedColleges = collegeResult.collegeNames;
 
         const reportData = await buildDueReportData({
             batch: batch || '',
@@ -2575,13 +2597,27 @@ const getDashboardStats = async (req, res) => {
         const collections = collectionStats[0] || { total: 0, cash: 0, online: 0 };
 
         // 2. Student Count (Regular students from SQL)
+        const collegeResult = await collegeScope.resolveCollegeScope({
+            user: req.user,
+            campusId: req.query.campusId
+        });
+        const courseResult = await courseScope.resolveCourseScope({
+            user: req.user,
+            collegeIds: collegeResult.collegeIds
+        });
+
         let studentCountQuery = "SELECT COUNT(*) as count FROM students WHERE LOWER(student_status) = 'regular'";
         const studentCountParams = [];
-        if (allowedColleges && allowedColleges.length > 0) {
-            studentCountQuery += ` AND college IN (${allowedColleges.map(() => '?').join(',')})`;
-            studentCountParams.push(...allowedColleges);
+        if (collegeResult.collegeIds.length > 0) {
+            studentCountQuery += ` AND (college_id IN (${collegeResult.collegeIds.map(() => '?').join(',')}) OR college IN (${collegeResult.collegeNames.map(() => '?').join(',')}))`;
+            studentCountParams.push(...collegeResult.collegeIds, ...collegeResult.collegeNames);
         }
-        const [studentCountResult] = hasNoAccess
+        if (courseResult.courseIds.length > 0) {
+            studentCountQuery += ` AND (course_id IN (${courseResult.courseIds.map(() => '?').join(',')}) OR course IN (${courseResult.courseNames.map(() => '?').join(',')}))`;
+            studentCountParams.push(...courseResult.courseIds, ...courseResult.courseNames);
+        }
+
+        const [studentCountResult] = hasNoAccess || !collegeResult.allowed || !courseResult.allowed
             ? [[{ count: 0 }]]
             : await db.query(studentCountQuery, studentCountParams);
         const totalStudents = studentCountResult[0]?.count || 0;

@@ -379,9 +379,18 @@ const DueReports = () => {
                     : filters.studentStatus.join(','))
                 : (filters.studentStatus || 'Regular');
 
+            const courseId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.course_id
+                : undefined;
+            const collegeId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.college_id
+                : (filters.college ? metadata[filters.college]?.[Object.keys(metadata[filters.college] || {})[0]]?.college_id : undefined);
+
             const params = {
                 college: filters.college,
+                collegeId: collegeId || undefined,
                 course: filters.course,
+                courseId: courseId || undefined,
                 branch: filters.branch.join(','),
                 batch: filters.batch,
                 year: reportMode === 'batch' ? '' : (Array.isArray(filters.year) ? filters.year.join(',') : (filters.year || '')),
