@@ -29,7 +29,7 @@ const buildStudentsQueryKey = () => {
     const queryParams = [];
     if (!isSuperAdmin) {
         if (user?.colleges && user.colleges.length > 0) {
-            queryParams.push(`college=${encodeURIComponent(user.colleges.join(','))}`);
+            queryParams.push(`college=${encodeURIComponent(user.colleges.join('||'))}`);
         } else if (user?.college) {
             queryParams.push(`college=${encodeURIComponent(user.college)}`);
         }
@@ -227,10 +227,21 @@ const FeeCollection = () => {
                     if (cancelled) return;
                     setRecentTransactions(recentRes.data || []);
                     setReceiptSettings(settingsRes.data);
-                    if (meRes.data?.paymentAccess !== undefined) {
+                    if (meRes.data) {
                         const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-                        localStorage.setItem('user', JSON.stringify({ ...storedUser, paymentAccess: meRes.data.paymentAccess }));
-                        setPaymentAccess(meRes.data.paymentAccess);
+                        const updatedUser = {
+                            ...storedUser,
+                            colleges: meRes.data.colleges || storedUser.colleges,
+                            college: meRes.data.college || storedUser.college,
+                            courses: meRes.data.courses || storedUser.courses,
+                            campuses: meRes.data.campuses || storedUser.campuses,
+                            permissions: meRes.data.permissions || storedUser.permissions,
+                            paymentAccess: meRes.data.paymentAccess !== undefined ? meRes.data.paymentAccess : storedUser.paymentAccess
+                        };
+                        localStorage.setItem('user', JSON.stringify(updatedUser));
+                        if (meRes.data.paymentAccess !== undefined) {
+                            setPaymentAccess(meRes.data.paymentAccess);
+                        }
                     }
                     setFeeCollectionCache(cacheKey, {
                         students: cached.students,
@@ -266,10 +277,21 @@ const FeeCollection = () => {
                 });
                 if (cancelled) return;
 
-                if (data.me?.paymentAccess !== undefined) {
+                if (data.me) {
                     const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-                    localStorage.setItem('user', JSON.stringify({ ...storedUser, paymentAccess: data.me.paymentAccess }));
-                    setPaymentAccess(data.me.paymentAccess);
+                    const updatedUser = {
+                        ...storedUser,
+                        colleges: data.me.colleges || storedUser.colleges,
+                        college: data.me.college || storedUser.college,
+                        courses: data.me.courses || storedUser.courses,
+                        campuses: data.me.campuses || storedUser.campuses,
+                        permissions: data.me.permissions || storedUser.permissions,
+                        paymentAccess: data.me.paymentAccess !== undefined ? data.me.paymentAccess : storedUser.paymentAccess
+                    };
+                    localStorage.setItem('user', JSON.stringify(updatedUser));
+                    if (data.me.paymentAccess !== undefined) {
+                        setPaymentAccess(data.me.paymentAccess);
+                    }
                 }
 
                 const activeConfigs = (data.paymentConfigs || []).filter(c => c.is_active);

@@ -435,10 +435,19 @@ const OverallConcession = () => {
         if (!canRequests) return;
         if (!silent) setRequestsLoading(true);
         try {
+            const courseId = reqFilters.college && reqFilters.course
+                ? metadata[reqFilters.college]?.[reqFilters.course]?.course_id
+                : undefined;
+            const collegeId = reqFilters.college && reqFilters.course
+                ? metadata[reqFilters.college]?.[reqFilters.course]?.college_id
+                : (reqFilters.college ? metadata[reqFilters.college]?.[Object.keys(metadata[reqFilters.college] || {})[0]]?.college_id : undefined);
+
             const baseParams = {
                     status: reqStatusFilter || undefined,
                     college: reqFilters.college || undefined,
+                    collegeId: collegeId || undefined,
                     course: reqFilters.course || undefined,
+                    courseId: courseId || undefined,
                     branch: reqFilters.branch || undefined,
                     batch: reqFilters.batch || undefined,
                     category: reqFilters.quota || undefined
@@ -492,11 +501,20 @@ const OverallConcession = () => {
     const fetchRegisterRequests = useCallback(async () => {
         setRegLoading(true);
         try {
+            const courseId = regFilters.college && regFilters.course
+                ? metadata[regFilters.college]?.[regFilters.course]?.course_id
+                : undefined;
+            const collegeId = regFilters.college && regFilters.course
+                ? metadata[regFilters.college]?.[regFilters.course]?.college_id
+                : (regFilters.college ? metadata[regFilters.college]?.[Object.keys(metadata[regFilters.college] || {})[0]]?.college_id : undefined);
+
             const res = await api.get('/overall-concessions/requests', {
                 params: {
                     status:  regStatusFilter || undefined,
                     college: regFilters.college || undefined,
+                    collegeId: collegeId || undefined,
                     course:  regFilters.course  || undefined,
+                    courseId: courseId || undefined,
                     branch:  regFilters.branch  || undefined,
                     batch:   regFilters.batch   || undefined,
                     search:  regSearchTerm.trim() || undefined
@@ -1356,7 +1374,21 @@ const OverallConcession = () => {
         }
         setLoading(true); setHasSearched(true); setSelectedStudent(null);
         try {
-            const res = await api.get('/overall-concessions', { params: { ...filters, search: searchTerm } });
+            const courseId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.course_id
+                : undefined;
+            const collegeId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.college_id
+                : (filters.college ? metadata[filters.college]?.[Object.keys(metadata[filters.college] || {})[0]]?.college_id : undefined);
+
+            const res = await api.get('/overall-concessions', {
+                params: {
+                    ...filters,
+                    collegeId: collegeId || undefined,
+                    courseId: courseId || undefined,
+                    search: searchTerm
+                }
+            });
             setStudents(res.data);
         } catch { alert('Failed to load students.'); }
         finally { setLoading(false); }
@@ -1375,7 +1407,20 @@ const OverallConcession = () => {
         setBulkError(''); setBulkSuccess(''); setBulkLoaded(false);
         setLoading(true);
         try {
-            const res = await api.get('/overall-concessions', { params: { ...filters } });
+            const courseId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.course_id
+                : undefined;
+            const collegeId = filters.college && filters.course
+                ? metadata[filters.college]?.[filters.course]?.college_id
+                : (filters.college ? metadata[filters.college]?.[Object.keys(metadata[filters.college] || {})[0]]?.college_id : undefined);
+
+            const res = await api.get('/overall-concessions', {
+                params: {
+                    ...filters,
+                    collegeId: collegeId || undefined,
+                    courseId: courseId || undefined
+                }
+            });
             // Apply quota filter client-side (stud_type match, case-insensitive)
             const allStudents = res.data || [];
             const loadedStudents = bulkQuotaFilter

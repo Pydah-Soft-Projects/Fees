@@ -1,26 +1,42 @@
 const db = require('../config/sqlDb');
 const { syncStudentFeesByAdmissionNumber } = require('../services/studentFeeSyncService');
 const collegeScope = require('../utils/collegeScope');
+const courseScope = require('../utils/courseScope');
 
 // @desc    Get all students
 // @route   GET /api/students
 const getStudents = async (req, res) => {
   try {
-    let { college, course, branch, batch, campusId } = req.query;
+    let { college, collegeId, college_id, course, courseId, course_id, branch, batch, campusId } = req.query;
 
-    const allowedColleges = await collegeScope.getEffectiveCollegeNames(req.user, campusId);
-    if (allowedColleges) {
-      if (college) {
-        const requested = college.split(',').map((c) => c.trim()).filter(Boolean);
-        const scoped = collegeScope.intersectCollegeNames(requested, allowedColleges);
-        college = scoped.join(',');
-        if (!college) return res.json([]);
-      } else {
-        college = allowedColleges.join(',');
-      }
+    const collegeResult = await collegeScope.resolveCollegeScope({
+      user: req.user,
+      college,
+      collegeId: collegeId || college_id,
+      campusId
+    });
+    if (!collegeResult.allowed) {
+      return res.json([]);
     }
 
-    console.log('Attempting to fetch students from SQL...', { college, course, branch, batch, campusId });
+    const courseResult = await courseScope.resolveCourseScope({
+      user: req.user,
+      course,
+      courseId: courseId || course_id,
+      collegeIds: collegeResult.collegeIds
+    });
+    if (!courseResult.allowed) {
+      return res.json([]);
+    }
+
+    console.log('Attempting to fetch students from SQL with dynamic ID/name resolution...', {
+      collegeIds: collegeResult.collegeIds,
+      collegeNames: collegeResult.collegeNames,
+      courseIds: courseResult.courseIds,
+      courseNames: courseResult.courseNames,
+      branch,
+      batch
+    });
 
     let query = `
       SELECT 
@@ -33,20 +49,17 @@ const getStudents = async (req, res) => {
 
     const conditions = [];
     const params = [];
-    if (college) {
-      const collegeList = college.split(',').map(c => c.trim()).filter(Boolean);
-      if (collegeList.length > 0) {
-        conditions.push(`college IN (${collegeList.map(() => '?').join(',')})`);
-        params.push(...collegeList);
-      }
+
+    if (collegeResult.collegeIds.length > 0) {
+      conditions.push(`(college_id IN (${collegeResult.collegeIds.map(() => '?').join(',')}) OR college IN (${collegeResult.collegeNames.map(() => '?').join(',')}))`);
+      params.push(...collegeResult.collegeIds, ...collegeResult.collegeNames);
     }
-    if (course) {
-      const courseList = course.split(',').map(c => c.trim()).filter(Boolean);
-      if (courseList.length > 0) {
-        conditions.push(`course IN (${courseList.map(() => '?').join(',')})`);
-        params.push(...courseList);
-      }
+
+    if (courseResult.courseIds.length > 0) {
+      conditions.push(`(course_id IN (${courseResult.courseIds.map(() => '?').join(',')}) OR course IN (${courseResult.courseNames.map(() => '?').join(',')}))`);
+      params.push(...courseResult.courseIds, ...courseResult.courseNames);
     }
+
     if (branch) {
       conditions.push('branch = ?');
       params.push(branch);
@@ -60,8 +73,6 @@ const getStudents = async (req, res) => {
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
 
-    // Optimize query: Select only necessary columns
-    // Including 'current_year' to map to Fee Structure's studentYear
     const [rows] = await db.query(query, params);
     console.log(`Successfully fetched ${rows.length} students.`);
     res.json(rows);
@@ -88,10 +99,14 @@ const getStudentMetadata = async (req, res) => {
 
     const [rows] = await db.query(`
       SELECT 
+        cl.id as college_id,
         cl.name as college, 
         cl.code as collegeCode,
+        c.id as course_id,
         c.name as course, 
+        c.code as courseCode,
         c.total_years as course_total_years,
+        cb.id as branch_id,
         cb.name as branch,
         cb.total_years as branch_total_years,
         cb.metadata as branch_metadata
@@ -121,15 +136,25 @@ const getStudentMetadata = async (req, res) => {
 
     const hierarchy = {};
     const collegeCodes = {};
+    const collegeIds = {};
+    const courseIds = {};
     
-    // Scoping down course mapping by courses array if user profile has restricted courses (e.g. Diploma user)
-    const userCourses = (req.user.courses || []).map(c => c.includes('|') ? c.split('|')[1] : c);
+    // Dynamic scoping down by resolved numeric course IDs from user profile
+    const allowedCourseIds = await courseScope.resolveAllowedCourseIds(req.user);
+
     rows.forEach(row => {
-      if (userCourses.length > 0 && !userCourses.includes(row.course)) {
+      const cid = Number(row.course_id);
+      if (allowedCourseIds !== null && !allowedCourseIds.has(cid)) {
         return;
       }
       if (row.college && row.collegeCode) {
         collegeCodes[row.college] = row.collegeCode.toUpperCase().trim();
+      }
+      if (row.college && row.college_id) {
+        collegeIds[row.college] = Number(row.college_id);
+      }
+      if (row.college && row.course && row.course_id) {
+        courseIds[`${row.college}|${row.course}`] = Number(row.course_id);
       }
 
       let effectiveYears = Number(row.branch_total_years || row.course_total_years || 4);
@@ -160,6 +185,10 @@ const getStudentMetadata = async (req, res) => {
       }
       if (!hierarchy[row.college][row.course]) {
         hierarchy[row.college][row.course] = {
+          id: cid,
+          course_id: cid,
+          college_id: Number(row.college_id),
+          code: row.courseCode,
           branches: [],
           branchDetails: {},
           total_years: Number(row.course_total_years || 4)
@@ -180,7 +209,7 @@ const getStudentMetadata = async (req, res) => {
 
     // Course → total_years from courses table (SQL schema: courses.total_years) – dynamic per course (scoped to allowed colleges)
     let courseQuery = `
-      SELECT c.name, c.total_years 
+      SELECT c.id, c.college_id, c.name, c.total_years 
       FROM courses c
       JOIN colleges cl ON c.college_id = cl.id
       WHERE c.is_active = 1 AND cl.is_active = 1 AND c.name IS NOT NULL AND c.name != ""
@@ -193,7 +222,8 @@ const getStudentMetadata = async (req, res) => {
     const [courseRows] = await db.query(courseQuery, courseParams);
     const courseYears = {};
     courseRows.forEach((r) => {
-      if (userCourses.length > 0 && !userCourses.includes(r.name)) {
+      const cid = Number(r.id);
+      if (allowedCourseIds !== null && !allowedCourseIds.has(cid)) {
         return;
       }
       const years = r.total_years != null ? Number(r.total_years) : 4;
@@ -203,6 +233,8 @@ const getStudentMetadata = async (req, res) => {
     // Fetch mapping of Categories per College, Course, Batch
     const [categoryRows] = await db.query(`
       SELECT DISTINCT 
+         college_id,
+         course_id,
          TRIM(college) as college, 
          TRIM(course) as course, 
          TRIM(batch) as batch, 
@@ -213,7 +245,8 @@ const getStudentMetadata = async (req, res) => {
      
      const categoryMapping = {};
      categoryRows.forEach(row => {
-       if (userCourses.length > 0 && !userCourses.includes(row.course)) {
+       const cid = Number(row.course_id);
+       if (allowedCourseIds !== null && cid && !allowedCourseIds.has(cid)) {
          return;
        }
        // Normalize values for key matching (lowercase and trimmed)
@@ -237,6 +270,8 @@ const getStudentMetadata = async (req, res) => {
        categoryMapping,
        courseYears,
        collegeCodes,
+       collegeIds,
+       courseIds,
        scopedColleges: allowedColleges,
      });
   } catch (error) {
@@ -287,7 +322,7 @@ const getStudentByAdmissionNumber = async (req, res) => {
     }
 
     const allowedColleges = await collegeScope.getUserCollegeNames(req.user);
-    if (allowedColleges && !allowedColleges.includes(rows[0].college)) {
+    if (allowedColleges && !collegeScope.isCollegeAllowed(rows[0].college, allowedColleges)) {
       return res.status(403).json({ message: 'Access denied for this student' });
     }
 

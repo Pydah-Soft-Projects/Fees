@@ -243,12 +243,14 @@ const UserManagement = () => {
     const handleCollegeToggle = (collegeName) => {
         const currentColleges = formData.colleges || [];
         const currentCourses = formData.courses || [];
+        const normCollege = collegeName.toLowerCase().replace(/[^a-z0-9]/g, '');
         let updatedColleges;
         let updatedCourses = [...currentCourses];
 
-        if (currentColleges.includes(collegeName)) {
-            updatedColleges = currentColleges.filter(c => c !== collegeName);
-            updatedCourses = currentCourses.filter(c => !c.startsWith(`${collegeName}|`));
+        const exists = currentColleges.some(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') === normCollege);
+        if (exists) {
+            updatedColleges = currentColleges.filter(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') !== normCollege);
+            updatedCourses = currentCourses.filter(c => c.split('|')[0].toLowerCase().replace(/[^a-z0-9]/g, '') !== normCollege);
         } else {
             updatedColleges = [...currentColleges, collegeName];
         }
@@ -262,11 +264,13 @@ const UserManagement = () => {
 
     const handleCourseToggle = (collegeName, courseName) => {
         const courseKey = `${collegeName}|${courseName}`;
+        const normCourseKey = courseKey.toLowerCase().replace(/[^a-z0-9]/g, '');
         const currentCourses = formData.courses || [];
         let updatedCourses;
 
-        if (currentCourses.includes(courseKey)) {
-            updatedCourses = currentCourses.filter(c => c !== courseKey);
+        const exists = currentCourses.some(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') === normCourseKey);
+        if (exists) {
+            updatedCourses = currentCourses.filter(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') !== normCourseKey);
         } else {
             updatedCourses = [...currentCourses, courseKey];
         }
@@ -278,9 +282,10 @@ const UserManagement = () => {
     };
 
     const handleSelectAllCourses = (collegeName) => {
+        const normCollege = collegeName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const coursesOfCollege = Object.keys(hierarchy[collegeName] || {});
         const currentCourses = formData.courses || [];
-        const otherCourses = currentCourses.filter(c => !c.startsWith(`${collegeName}|`));
+        const otherCourses = currentCourses.filter(c => c.split('|')[0].toLowerCase().replace(/[^a-z0-9]/g, '') !== normCollege);
         const newCourses = coursesOfCollege.map(c => `${collegeName}|${c}`);
         setFormData({
             ...formData,
@@ -289,8 +294,9 @@ const UserManagement = () => {
     };
 
     const handleClearAllCourses = (collegeName) => {
+        const normCollege = collegeName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const currentCourses = formData.courses || [];
-        const updatedCourses = currentCourses.filter(c => !c.startsWith(`${collegeName}|`));
+        const updatedCourses = currentCourses.filter(c => c.split('|')[0].toLowerCase().replace(/[^a-z0-9]/g, '') !== normCollege);
         setFormData({
             ...formData,
             courses: updatedCourses
@@ -1307,7 +1313,7 @@ const UserManagement = () => {
                                                 <p className="text-xs text-gray-500">No colleges available for selected campus(es).</p>
                                             ) : (
                                                 visibleColleges.map(collegeName => {
-                                                    const isChecked = (formData.colleges || []).includes(collegeName);
+                                                    const isChecked = (formData.colleges || []).some(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') === collegeName.toLowerCase().replace(/[^a-z0-9]/g, ''));
                                                     const collegeCourses = hierarchy[collegeName] ? Object.keys(hierarchy[collegeName]) : [];
                                                     return (
                                                         <div key={collegeName} className="border-b last:border-b-0 pb-3 last:pb-0">
@@ -1345,7 +1351,8 @@ const UserManagement = () => {
                                                                     <div className="grid grid-cols-2 gap-1.5">
                                                                         {collegeCourses.map(courseName => {
                                                                             const courseKey = `${collegeName}|${courseName}`;
-                                                                            const isCourseChecked = (formData.courses || []).includes(courseKey);
+                                                                            const normCourseKey = courseKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+                                                                            const isCourseChecked = (formData.courses || []).some(c => c.toLowerCase().replace(/[^a-z0-9]/g, '') === normCourseKey);
                                                                             return (
                                                                                 <label key={courseName} className="flex items-center space-x-1.5 cursor-pointer p-0.5 rounded hover:bg-gray-50">
                                                                                     <input
