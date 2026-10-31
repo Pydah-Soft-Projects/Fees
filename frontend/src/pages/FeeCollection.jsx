@@ -39,7 +39,7 @@ const buildStudentsQueryKey = () => {
         }
     }
     const queryString = queryParams.length > 0 ? `?${queryParams.join('&')}` : '';
-    return { queryString, cacheKey: `${user?.id || user?.username || 'anon'}|${queryString}` };
+    return { queryString, cacheKey: `${user?.id || user?.username || 'anon'}|v2|${queryString}` };
 };
 
 const FeeCollection = () => {
@@ -323,6 +323,9 @@ const FeeCollection = () => {
             const mobile = s.student_mobile ? String(s.student_mobile).toLowerCase().trim() : '';
             const pin = s.pin_no ? String(s.pin_no).toLowerCase().trim() : '';
             const name = s.student_name ? s.student_name.toLowerCase().trim() : '';
+            const college = s.college ? s.college.toLowerCase().trim() : '';
+            const course = s.course ? s.course.toLowerCase().trim() : '';
+            const branch = s.branch ? s.branch.toLowerCase().trim() : '';
 
             const cleanAdmNum = admNum.replace(/[^a-z0-9]/g, '');
             const cleanAdmNo = admNo.replace(/[^a-z0-9]/g, '');
@@ -334,6 +337,9 @@ const FeeCollection = () => {
                 mobile.includes(query) ||
                 pin.includes(query) ||
                 name.includes(query) ||
+                college.includes(query) ||
+                course.includes(query) ||
+                branch.includes(query) ||
                 (cleanQuery.length > 0 && cleanAdmNum.includes(cleanQuery)) ||
                 (cleanQuery.length > 0 && cleanAdmNo.includes(cleanQuery)) ||
                 (cleanQuery.length > 0 && cleanPin.includes(cleanQuery))
