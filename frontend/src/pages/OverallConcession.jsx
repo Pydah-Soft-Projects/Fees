@@ -596,6 +596,7 @@ const OverallConcession = () => {
             studentName: s.student_name,
             admissionNumber: s.admission_number,
             pinNo: s.pin_no,
+            quota: s.stud_type || 'Regular',
             college: s.college,
             course: s.course,
             branch: s.branch,
@@ -676,6 +677,7 @@ const OverallConcession = () => {
                 studentName: s.student_name,
                 admissionNumber: s.admission_number,
                 pinNo: s.pin_no,
+                quota: s.stud_type || 'Regular',
                 college: s.college,
                 course: s.course,
                 branch: s.branch,
@@ -783,14 +785,9 @@ const OverallConcession = () => {
                 }
             });
 
-            const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) => {
-                const countA = feeHeadPopularity[a[0]] || 0;
-                const countB = feeHeadPopularity[b[0]] || 0;
-                if (countA !== countB) {
-                    return countB - countA;
-                }
-                return String(a[1].name || '').localeCompare(String(b[1].name || ''));
-            });
+            const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
+                String(a[1].name || '').localeCompare(String(b[1].name || ''))
+            );
 
             const courseYearsHint = Number(courseYears[filters.course]);
             let years = [...yearsSet].sort((a, b) => a - b);
@@ -840,7 +837,7 @@ const OverallConcession = () => {
             if (viewQuotaFilter) filterParts.push(`Quota: ${viewQuotaFilter}`);
             const filterLabel = filterParts.length ? filterParts.join(' · ') : 'All Colleges / Courses / Branches';
 
-            const totalCols = Math.max(6, 5 + feeHeadEntries.length + 1);
+            const totalCols = Math.max(7, 6 + feeHeadEntries.length + 1);
 
             const reportSubtitle = includeNormalFees
                 ? 'OVERALL CONCESSION & STANDARD FEE STRUCTURE — COMBINED OVERVIEW'
@@ -856,6 +853,7 @@ const OverallConcession = () => {
                     'Student Name',
                     'Adm No',
                     'PIN No',
+                    'Quota',
                     'Year',
                     ...feeHeadEntries.map(([_, row]) => row.name || 'Fee Head'),
                     'Remarks'
@@ -902,6 +900,7 @@ const OverallConcession = () => {
                         yrIdx === 0 ? (req.studentName || '—') : '',
                         yrIdx === 0 ? (req.admissionNumber || '—') : '',
                         yrIdx === 0 ? (req.pinNo || '—') : '',
+                        yrIdx === 0 ? (req.quota || '—') : '',
                         `${yrSfx(yr)} Yr`,
                         ...feeCols,
                         remarks
@@ -914,6 +913,7 @@ const OverallConcession = () => {
                     merges.push({ s: { r: startRow, c: 1 }, e: { r: endRow, c: 1 } });
                     merges.push({ s: { r: startRow, c: 2 }, e: { r: endRow, c: 2 } });
                     merges.push({ s: { r: startRow, c: 3 }, e: { r: endRow, c: 3 } });
+                    merges.push({ s: { r: startRow, c: 4 }, e: { r: endRow, c: 4 } });
                 }
             });
 
@@ -928,6 +928,7 @@ const OverallConcession = () => {
                 { wch: 28 }, // Student Name
                 { wch: 16 }, // Adm No
                 { wch: 16 }, // PIN No
+                { wch: 12 }, // Quota
                 { wch: 12 }, // Year
                 ...feeHeadEntries.map(([_, row]) => ({ wch: Math.max(16, (row.name || '').length + 4) })),
                 { wch: 25 }  // Remarks
@@ -2226,11 +2227,6 @@ const OverallConcession = () => {
                         });
 
                         unionFeeHeads.sort((a, b) => {
-                            const countA = feeHeadPopularity[a] || 0;
-                            const countB = feeHeadPopularity[b] || 0;
-                            if (countA !== countB) {
-                                return countB - countA;
-                            }
                             const nameA = getFeeHeadName(a);
                             const nameB = getFeeHeadName(b);
                             return nameA.localeCompare(nameB);
@@ -2411,7 +2407,7 @@ const OverallConcession = () => {
                                                     <tr key={s.admission_number} className="hover:bg-slate-50/30 align-top">
                                                         <td className="p-4">
                                                             <div className="font-bold text-slate-900 text-sm">{s.student_name}</div>
-                                                            <div className="text-slate-500 mt-0.5 font-medium">Pin: <span className="font-semibold text-slate-700">{s.pin_no}</span> | Adm: {s.admission_number}</div>
+                                                            <div className="text-slate-500 mt-0.5 font-medium">Pin: <span className="font-semibold text-slate-700">{s.pin_no}</span> | Quota: <span className="font-semibold text-slate-700">{s.stud_type || '—'}</span> | Adm: {s.admission_number}</div>
                                                         </td>
                                                         <td className="p-4">
                                                             {hasDisplayData ? (

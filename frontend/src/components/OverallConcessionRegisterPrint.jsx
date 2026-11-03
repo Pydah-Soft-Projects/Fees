@@ -57,8 +57,10 @@ const SingleStudentPrint = ({ request }) => {
         }
     });
 
-    // Fee components become columns; academic years become rows
-    const feeHeadEntries = Object.entries(byHead);
+    // Fee components become columns; academic years become rows (sorted alphabetically)
+    const feeHeadEntries = Object.entries(byHead).sort((a, b) =>
+        String(a[1].name || '').localeCompare(String(b[1].name || ''))
+    );
 
     const grandTotal = concessions.reduce((s, c) => s + Number(c.amount ?? 0), 0);
 
@@ -257,14 +259,9 @@ const AllStudentsPrint = ({ requests, filters }) => {
         }
     });
 
-    const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) => {
-        const countA = feeHeadPopularity[a[0]] || 0;
-        const countB = feeHeadPopularity[b[0]] || 0;
-        if (countA !== countB) {
-            return countB - countA;
-        }
-        return String(a[1].name || '').localeCompare(String(b[1].name || ''));
-    });
+    const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
+        String(a[1].name || '').localeCompare(String(b[1].name || ''))
+    );
 
     // Prefer courseYears from filters if provided; otherwise use concession years
     const courseYearsHint = Number(filters?.courseYears);
@@ -349,6 +346,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                             <th style={{ ...headBorder, width: '130px', textAlign: 'left' }}>Student Name</th>
                             <th style={{ ...headBorder, width: '75px' }}>Adm No</th>
                             <th style={{ ...headBorder, width: '75px' }}>PIN No</th>
+                            <th style={{ ...headBorder, width: '55px' }}>Quota</th>
                             <th style={{ ...headBorder, width: '50px' }}>Year</th>
                             {feeHeadEntries.map(([fhId, row]) => (
                                 <th key={fhId} style={{ ...headBorder, textTransform: 'none', fontSize: '8px', wordBreak: 'break-word', whiteSpace: 'normal' }}>
@@ -376,6 +374,9 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                             </td>
                                             <td style={{ ...cellBorder, fontFamily: 'monospace', fontSize: '8px' }} rowSpan={years.length}>
                                                 {req.pinNo || req.pin_no || '—'}
+                                            </td>
+                                            <td style={{ ...cellBorder, fontSize: '8px', fontWeight: '700' }} rowSpan={years.length}>
+                                                {req.quota || req.stud_type || '—'}
                                             </td>
                                         </>
                                     )}
