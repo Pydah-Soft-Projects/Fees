@@ -398,7 +398,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                             const tagBorder = isConc ? '#fef3c7' : '#bbf7d0';
 
                                             return (
-                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, padding: '3px 4px', lineHeight: '1.2' }}>
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, padding: '3px 4px', lineHeight: '1.2', backgroundColor: isConc ? '#fffdf0' : '#f0fdf4' }}>
                                                     <div style={{ fontSize: '8px', color: '#475569' }}>
                                                         <span style={{ fontSize: '7px', color: '#64748b', fontWeight: '700' }}>Org: </span>₹{fmt(stdAmt)}
                                                     </div>
@@ -435,7 +435,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                             const tagBorder = isConc ? '#fef3c7' : '#bbf7d0';
 
                                             return (
-                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '700' }}>
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '700', backgroundColor: isConc ? '#fffdf0' : '#f0fdf4' }}>
                                                     <span style={{ color: isConc ? '#b45309' : '#047857' }}>
                                                         {isConc ? '-' : ''}₹{fmt(amt)}
                                                     </span>
@@ -460,7 +460,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                         // If only normal fee structure exists, display standard fee amount without tags
                                         if (hasStd) {
                                             return (
-                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '600', color: '#1e293b' }}>
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '600', color: '#1e293b', backgroundColor: '#f8fafc' }}>
                                                     ₹{fmt(stdAmt)}
                                                 </td>
                                             );

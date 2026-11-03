@@ -929,6 +929,8 @@ const OverallConcession = () => {
             });
 
             aoa.push([]);
+            aoa.push(['LEGEND:  ■ Revised Fee (Green)   |   ■ Concession (Amber)   |   ■ Standard Fee Structure (Slate Gray)']);
+            merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: totalCols - 1 } });
             aoa.push(['This is a computer-generated Overall Concession Report for internal records only.']);
             merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: totalCols - 1 } });
 
@@ -1022,39 +1024,86 @@ const OverallConcession = () => {
                         const val = String(ws[ref].v || '');
 
                         let fontColor = '1E293B';
+                        let cellBg = bgRgb;
                         let isBold = false;
                         let alignH = 'center';
 
-                        if (c === 1) { // Student Name
-                            alignH = 'left';
-                            isBold = true;
-                        } else if (c === 0 || c === 2 || c === 3 || c === 4) { // S.No, Adm, PIN, Year
+                        if (c === 0) { // S.No
                             alignH = 'center';
-                            if (c === 0 || c === 4) isBold = true;
+                            fontColor = '1E293B';
+                            isBold = true;
+                        } else if (c === 1) { // Student Name
+                            alignH = 'left';
+                            fontColor = '0F172A';
+                            isBold = true;
+                        } else if (c === 2) { // Adm No
+                            alignH = 'center';
+                            fontColor = '475569';
+                        } else if (c === 3) { // PIN No
+                            alignH = 'center';
+                            fontColor = '0F172A';
+                            isBold = true;
+                        } else if (c === 4) { // Quota
+                            alignH = 'center';
+                            fontColor = '1D4ED8'; // Royal Blue
+                            cellBg = sIdx % 2 === 0 ? 'EFF6FF' : 'E0EDFD'; // Subtle blue accent
+                            isBold = true;
+                        } else if (c === 5) { // Year
+                            alignH = 'center';
+                            fontColor = '334155';
+                            isBold = true;
                         } else if (c === totalCols - 1) { // Remarks
                             alignH = 'left';
-                        } else { // Fee heads
+                            fontColor = val === '—' ? '94A3B8' : '334155';
+                        } else { // Fee heads (c >= 6 && c < totalCols - 1)
                             alignH = 'center';
-                            if (val.includes('(Rev.)')) {
-                                fontColor = '047857'; // Green
+                            const isConc = val.includes('Conc') || val.includes('(Conc.)');
+                            const isRev = val.includes('Rev') || val.includes('(Rev.)');
+
+                            if (isConc) {
+                                fontColor = 'B45309'; // Rich Amber
+                                cellBg = 'FEF3C7';    // Soft Warm Amber fill
                                 isBold = true;
-                            } else if (val.includes('(Conc.)')) {
-                                fontColor = 'B45309'; // Amber
+                            } else if (isRev) {
+                                fontColor = '047857'; // Deep Emerald Green
+                                cellBg = 'E6F4EA';    // Soft Light Green fill
                                 isBold = true;
-                            } else if (val === '—') {
+                            } else if (val === '—' || !val) {
                                 fontColor = '94A3B8'; // Muted Gray
+                                cellBg = bgRgb;
+                            } else {
+                                // Standard / normal fee structure
+                                fontColor = '1E293B'; // Dark Slate
+                                cellBg = 'F1F5F9';    // Soft Slate fill
+                                isBold = true;
                             }
                         }
 
                         ws[ref].s = {
-                            fill: { fgColor: { rgb: bgRgb } },
+                            fill: { fgColor: { rgb: cellBg } },
                             font: { name: 'Arial', sz: 9, bold: isBold, color: { rgb: fontColor } },
-                            alignment: { horizontal: alignH, vertical: 'center' },
+                            alignment: { horizontal: alignH, vertical: 'center', wrapText: true },
                             border: borderThin
                         };
                     }
                 });
             });
+
+            // Style Legend Row
+            const legendRowIdx = aoa.length - 2;
+            for (let c = 0; c < totalCols; c++) {
+                const ref = XLSX.utils.encode_cell({ r: legendRowIdx, c });
+                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+                ws[ref].s = {
+                    fill: { fgColor: { rgb: 'F1F5F9' } },
+                    font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '334155' } },
+                    alignment: { horizontal: 'center', vertical: 'center' },
+                    border: {
+                        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
+                        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } }
+                    }
+                };
+            }
 
             // Style Footer Note
             const footerRowIdx = aoa.length - 1;
@@ -2463,7 +2512,7 @@ const OverallConcession = () => {
                                                                                             if (hasStd && hasConc) {
                                                                                                 const isConc = cell.type === 'CONCESSION';
                                                                                                 return (
-                                                                                                    <td key={fhId} className="px-3 py-2 text-center border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                    <td key={fhId} className={`px-3 py-2 text-center border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px] ${isConc ? 'bg-amber-50/30' : 'bg-emerald-50/30'}`}>
                                                                                                         <div className="text-[10px] text-slate-500 font-medium leading-tight">
                                                                                                             <span className="text-[9px] text-slate-400 font-bold">Org: </span>₹{stdAmt.toLocaleString('en-IN')}
                                                                                                         </div>
@@ -2481,7 +2530,7 @@ const OverallConcession = () => {
                                                                                             if (hasConc) {
                                                                                                 const isConc = cell.type === 'CONCESSION';
                                                                                                 return (
-                                                                                                    <td key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                    <td key={fhId} className={`px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px] ${isConc ? 'bg-amber-50/30' : 'bg-emerald-50/30'}`}>
                                                                                                         <span className={isConc ? 'text-amber-700' : 'text-emerald-700'} title={cell.remarks || undefined}>
                                                                                                             {isConc ? '-' : ''}₹{Number(cell.amount).toLocaleString('en-IN')}
                                                                                                             <span className={`ml-1 px-1 py-0.5 rounded text-[8px] font-bold border ${isConc ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
@@ -2495,7 +2544,7 @@ const OverallConcession = () => {
                                                                                             // If only normal fee structure exists, display standard fee amount without tags
                                                                                             if (hasStd) {
                                                                                                 return (
-                                                                                                    <td key={fhId} className="px-3 py-2 text-center font-semibold text-slate-800 border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                    <td key={fhId} className="px-3 py-2 text-center font-semibold text-slate-800 border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px] bg-slate-50/40">
                                                                                                         <span>
                                                                                                             ₹{stdAmt.toLocaleString('en-IN')}
                                                                                                         </span>
