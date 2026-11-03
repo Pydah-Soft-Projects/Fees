@@ -114,7 +114,63 @@ const getOverallConcessions = async (req, res) => {
             }
         });
 
-        // 3. Return students with revised fees attached
+        // 3. Fetch standard fee structures for these students
+        const studentColleges = [...new Set(students.map(s => s.college).filter(Boolean))];
+        const studentCourses = [...new Set(students.map(s => s.course).filter(Boolean))];
+        const studentBatches = [...new Set(students.map(s => s.batch).filter(Boolean))];
+
+        const structures = await FeeStructure.find({
+            college: { $in: studentColleges },
+            course: { $in: studentCourses },
+            batch: { $in: studentBatches }
+        }).populate('feeHead', 'name code').lean();
+
+        // Build standard fees lookup per student
+        const standardFeesMap = {};
+        students.forEach(s => {
+            const studentCat = (s.stud_type || 'Regular').trim().toUpperCase();
+            const candidateStructures = structures.filter(fs =>
+                fs.college === s.college &&
+                fs.course === s.course &&
+                fs.batch === s.batch &&
+                (fs.branch === s.branch || !fs.branch || fs.branch === 'ALL')
+            );
+
+            // Group candidate structures by feeHeadId + studentYear + semester
+            // Prefer exact category match over fallback (REGULAR / CONV)
+            const structMap = new Map();
+            candidateStructures.forEach(fs => {
+                const fsCat = (fs.category || 'Regular').trim().toUpperCase();
+                const isExactCat = fsCat === studentCat;
+                const isFallback = fsCat === 'REGULAR' || fsCat === 'CONV';
+                if (!isExactCat && !isFallback) return;
+
+                const fhId = (fs.feeHead?._id || fs.feeHead || '').toString();
+                const semKey = fs.semester ?? 'Y';
+                const key = `${fhId}_${fs.studentYear}_${semKey}`;
+
+                if (!structMap.has(key) || (isExactCat && !structMap.get(key).isExact)) {
+                    structMap.set(key, { fs, isExact: isExactCat });
+                }
+            });
+
+            const matched = Array.from(structMap.values()).map(v => v.fs);
+            standardFeesMap[s.admission_number] = matched.map(fs => {
+                const fhId = (fs.feeHead?._id || fs.feeHead || '').toString();
+                const code = fs.feeHead?.code || codeMap[fhId] || '';
+                const fhObj = feeHeads.find(h => String(h._id) === fhId);
+                return {
+                    feeHeadId: fhId,
+                    feeHeadCode: code,
+                    feeHeadName: fs.feeHead?.name || fhObj?.name || code || 'Fee Component',
+                    studentYear: fs.studentYear,
+                    semester: fs.semester ?? null,
+                    amount: Number(fs.amount) || 0
+                };
+            });
+        });
+
+        // 4. Return students with revised fees and standard fees attached
         const results = students.map(s => ({
             admission_number: s.admission_number,
             pin_no: s.pin_no || '-',
@@ -127,7 +183,8 @@ const getOverallConcessions = async (req, res) => {
             current_semester: s.current_semester,
             stud_type: s.stud_type || 'Regular',
             student_status: s.student_status,
-            revisedFees: concessionMap[s.admission_number] || []
+            revisedFees: concessionMap[s.admission_number] || [],
+            standardFees: standardFeesMap[s.admission_number] || []
         }));
 
         res.json(results);

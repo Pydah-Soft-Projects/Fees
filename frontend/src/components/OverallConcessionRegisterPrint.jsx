@@ -183,10 +183,27 @@ const SingleStudentPrint = ({ request }) => {
 // Rows: one row per student × year (student cells use rowSpan)
 // ══════════════════════════════════════════════════════════════════════════
 const AllStudentsPrint = ({ requests, filters }) => {
+    const includeNormalFees = Boolean(filters?.includeNormalFees);
+
     const sortedReqs = [...requests].sort((a, b) => {
-        const nameCmp = String(a.studentName || '').localeCompare(String(b.studentName || ''));
-        if (nameCmp !== 0) return nameCmp;
-        return String(a.admissionNumber || '').localeCompare(String(b.admissionNumber || ''));
+        const pinA = String(a.pinNo || a.pin_no || '').trim();
+        const pinB = String(b.pinNo || b.pin_no || '').trim();
+        const isInvalidA = !pinA || pinA === '-';
+        const isInvalidB = !pinB || pinB === '-';
+
+        if (isInvalidA && !isInvalidB) return 1;
+        if (!isInvalidA && isInvalidB) return -1;
+        if (!isInvalidA && !isInvalidB) {
+            const pinCmp = pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
+            if (pinCmp !== 0) return pinCmp;
+        }
+
+        const admA = String(a.admissionNumber || a.admission_number || '').trim();
+        const admB = String(b.admissionNumber || b.admission_number || '').trim();
+        const admCmp = admA.localeCompare(admB, undefined, { numeric: true, sensitivity: 'base' });
+        if (admCmp !== 0) return admCmp;
+
+        return String(a.studentName || a.student_name || '').localeCompare(String(b.studentName || b.student_name || ''));
     });
 
     // Union of fee heads across all students (same columns for everyone)
@@ -205,6 +222,20 @@ const AllStudentsPrint = ({ requests, filters }) => {
                 });
             }
         });
+        if (includeNormalFees) {
+            (req.standardFees || []).forEach((sf) => {
+                const yr = Number(sf.studentYear);
+                if (Number.isFinite(yr) && yr > 0) yearsSet.add(yr);
+
+                const hid = String(sf.feeHeadId);
+                if (!feeHeadMap.has(hid)) {
+                    feeHeadMap.set(hid, {
+                        name: sf.feeHeadName || sf.feeHeadCode || hid,
+                        code: sf.feeHeadCode || ''
+                    });
+                }
+            });
+        }
     });
 
     // Calculate global popularity of fee heads across printed students
@@ -216,6 +247,14 @@ const AllStudentsPrint = ({ requests, filters }) => {
                 feeHeadPopularity[hid] = (feeHeadPopularity[hid] || 0) + 1;
             }
         });
+        if (includeNormalFees) {
+            (req.standardFees || []).forEach((sf) => {
+                const hid = String(sf.feeHeadId);
+                if (hid) {
+                    feeHeadPopularity[hid] = (feeHeadPopularity[hid] || 0) + 1;
+                }
+            });
+        }
     });
 
     const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) => {
@@ -238,10 +277,12 @@ const AllStudentsPrint = ({ requests, filters }) => {
 
     // Per-student lookup: admissionNumber → feeHeadId → year → cell object, and student remarks
     const amountLookup = {};
+    const standardLookup = {};
     const remarksLookup = {};
     sortedReqs.forEach((req) => {
         const adm = String(req.admissionNumber || '');
         if (!amountLookup[adm]) amountLookup[adm] = {};
+        if (!standardLookup[adm]) standardLookup[adm] = {};
         if (!remarksLookup[adm]) remarksLookup[adm] = {};
         (req.concessions || []).forEach((c) => {
             const hid = String(c.feeHeadId);
@@ -255,6 +296,14 @@ const AllStudentsPrint = ({ requests, filters }) => {
                 remarksLookup[adm][yr] = c.remarks;
             }
         });
+        if (includeNormalFees) {
+            (req.standardFees || []).forEach((sf) => {
+                const hid = String(sf.feeHeadId);
+                const yr = Number(sf.studentYear);
+                if (!standardLookup[adm][hid]) standardLookup[adm][hid] = {};
+                standardLookup[adm][hid][yr] = Number(sf.amount ?? 0);
+            });
+        }
     });
 
     const filterParts = [];
@@ -275,9 +324,13 @@ const AllStudentsPrint = ({ requests, filters }) => {
         background: '#f0f0f0'
     };
 
+    const subtitleText = includeNormalFees
+        ? "Overall Concession & Standard Fee Structure — Combined Overview"
+        : "Overall Concession (Revised Fees) — Overview";
+
     return (
         <div style={{ fontFamily: 'Arial, sans-serif', padding: '16px 20px', color: '#111', background: '#fff', minHeight: '297mm' }}>
-            <Header subtitle="Overall Concession (Revised Fees) — Overview" />
+            <Header subtitle={subtitleText} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', fontWeight: '700', marginBottom: '12px', borderBottom: '1px solid #ccc', paddingBottom: '6px' }}>
                 <span>Filter: <span style={{ fontWeight: '700' }}>{filterLabel}</span></span>
@@ -286,7 +339,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
 
             {feeHeadEntries.length === 0 ? (
                 <div style={{ fontSize: '11px', color: '#666', padding: '20px 0', textAlign: 'center' }}>
-                    No revised fee entries to display for the selected students.
+                    {includeNormalFees ? 'No fee structure or revised fee entries to display for the selected students.' : 'No revised fee entries to display for the selected students.'}
                 </div>
             ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9px', border: '1.5px solid #000', tableLayout: 'fixed' }}>
@@ -309,6 +362,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                         {sortedReqs.map((req, sIdx) => {
                             const adm = String(req.admissionNumber || '');
                             const studentAmounts = amountLookup[adm] || {};
+                            const studentStandards = standardLookup[adm] || {};
                             return years.map((yr, yrIdx) => (
                                 <tr key={`${adm}_${yr}`} style={{ backgroundColor: sIdx % 2 === 0 ? '#fff' : '#f9f9f9' }}>
                                     {yrIdx === 0 && (
@@ -328,39 +382,52 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                     <td style={{ ...cellBorder, fontWeight: '700' }}>{yrSfx(yr)} Yr</td>
                                     {feeHeadEntries.map(([fhId]) => {
                                         const cell = studentAmounts[fhId]?.[yr];
-                                        if (!cell) {
+                                        const stdAmt = studentStandards[fhId]?.[yr];
+
+                                        // If revised or concession exists, consider it (with tag)
+                                        if (cell) {
+                                            const amt = Number(cell.amount ?? 0);
+                                            const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
+                                            const tagText = isConc ? 'Conc.' : 'Rev.';
+                                            const tagBg = isConc ? '#fffbe6' : '#e6f4ea';
+                                            const tagColor = isConc ? '#d97706' : '#166534';
+                                            const tagBorder = isConc ? '#fef3c7' : '#bbf7d0';
+
                                             return (
-                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, color: '#888', fontWeight: '400' }}>
-                                                    —
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '700' }}>
+                                                    <span style={{ color: isConc ? '#b45309' : '#047857' }}>
+                                                        {isConc ? '-' : ''}₹{fmt(amt)}
+                                                    </span>
+                                                    <span style={{
+                                                        marginLeft: '2px',
+                                                        padding: '0px 2px',
+                                                        borderRadius: '2px',
+                                                        fontSize: '7px',
+                                                        fontWeight: '800',
+                                                        background: tagBg,
+                                                        color: tagColor,
+                                                        border: `1px solid ${tagBorder}`,
+                                                        display: 'inline-block',
+                                                        verticalAlign: 'middle'
+                                                    }}>
+                                                        {tagText}
+                                                    </span>
                                                 </td>
                                             );
                                         }
-                                        const amt = Number(cell.amount ?? 0);
-                                        const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
-                                        const tagText = isConc ? 'Conc.' : 'Rev.';
-                                        const tagBg = isConc ? '#fffbe6' : '#e6f4ea';
-                                        const tagColor = isConc ? '#d97706' : '#166534';
-                                        const tagBorder = isConc ? '#fef3c7' : '#bbf7d0';
+
+                                        // In combined mode, if standard fee structure exists for this head, display it without tags
+                                        if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                                            return (
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '600', color: '#1e293b' }}>
+                                                    ₹{fmt(stdAmt)}
+                                                </td>
+                                            );
+                                        }
 
                                         return (
-                                            <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '700' }}>
-                                                <span style={{ color: isConc ? '#b45309' : '#047857' }}>
-                                                    {isConc ? '-' : ''}₹{fmt(amt)}
-                                                </span>
-                                                <span style={{
-                                                    marginLeft: '2px',
-                                                    padding: '0px 2px',
-                                                    borderRadius: '2px',
-                                                    fontSize: '7px',
-                                                    fontWeight: '800',
-                                                    background: tagBg,
-                                                    color: tagColor,
-                                                    border: `1px solid ${tagBorder}`,
-                                                    display: 'inline-block',
-                                                    verticalAlign: 'middle'
-                                                }}>
-                                                    {tagText}
-                                                </span>
+                                            <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, color: '#888', fontWeight: '400' }}>
+                                                —
                                             </td>
                                         );
                                     })}

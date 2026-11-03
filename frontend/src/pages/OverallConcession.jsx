@@ -289,6 +289,7 @@ const OverallConcession = () => {
     const [downloadModalOpen, setDownloadModalOpen] = useState(false);
     const [downloadScope,     setDownloadScope]     = useState('all');
     const [viewExcelBusy,     setViewExcelBusy]     = useState(false);
+    const [includeNormalFees, setIncludeNormalFees] = useState(false);
 
     // ── pending requests map (admissionNumber → true) for badge ──────────
     const [pendingAdmSet, setPendingAdmSet] = useState(new Set());
@@ -581,7 +582,7 @@ const OverallConcession = () => {
 
         const selectedStudents = includeAll
             ? quotaFiltered
-            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0);
+            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0 || (includeNormalFees && (s.standardFees || []).length > 0));
 
         if (selectedStudents.length === 0) {
             alert(includeAll ? 'No students loaded to print.' : 'No revised-fee students to print.');
@@ -615,7 +616,20 @@ const OverallConcession = () => {
                     };
                 })
                 // Avoid printing empty/0 concessions. The report grid will show dashes anyway.
-                .filter(c => Number.isFinite(c.amount) && c.amount >= 0)
+                .filter(c => Number.isFinite(c.amount) && c.amount >= 0),
+            standardFees: (s.standardFees || [])
+                .map(sf => {
+                    const fhId = normalizeFeeHeadId(sf.feeHeadId);
+                    return {
+                        feeHeadId: fhId,
+                        feeHeadCode: sf.feeHeadCode || '',
+                        feeHeadName: sf.feeHeadName || getFeeHeadName(fhId, sf.feeHeadCode),
+                        studentYear: sf.studentYear,
+                        semester: sf.semester ?? null,
+                        amount: Number(sf.amount) || 0
+                    };
+                })
+                .filter(sf => Number.isFinite(sf.amount) && sf.amount > 0)
         }));
 
         setViewPrintBusy(true);
@@ -627,7 +641,8 @@ const OverallConcession = () => {
                     filters: {
                         ...filters,
                         quota: viewQuotaFilter || undefined,
-                        courseYears: courseYears[filters.course] || undefined
+                        courseYears: courseYears[filters.course] || undefined,
+                        includeNormalFees: Boolean(includeNormalFees)
                     },
                     generatedOn: new Date().toLocaleString('en-IN')
                 }
@@ -647,7 +662,7 @@ const OverallConcession = () => {
 
         const selectedStudents = includeAll
             ? quotaFiltered
-            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0);
+            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0 || (includeNormalFees && (s.standardFees || []).length > 0));
 
         if (selectedStudents.length === 0) {
             alert(includeAll ? 'No students loaded to export.' : 'No revised-fee students to export.');
@@ -680,13 +695,41 @@ const OverallConcession = () => {
                             remarks: rf.remarks || ''
                         };
                     })
-                    .filter(c => Number.isFinite(c.amount) && c.amount >= 0)
+                    .filter(c => Number.isFinite(c.amount) && c.amount >= 0),
+                standardFees: (s.standardFees || [])
+                    .map(sf => {
+                        const fhId = normalizeFeeHeadId(sf.feeHeadId);
+                        return {
+                            feeHeadId: fhId,
+                            feeHeadCode: sf.feeHeadCode || '',
+                            feeHeadName: sf.feeHeadName || getFeeHeadName(fhId, sf.feeHeadCode),
+                            studentYear: sf.studentYear,
+                            semester: sf.semester ?? null,
+                            amount: Number(sf.amount) || 0
+                        };
+                    })
+                    .filter(sf => Number.isFinite(sf.amount) && sf.amount > 0)
             }));
 
             const sortedReqs = [...requests].sort((a, b) => {
-                const nameCmp = String(a.studentName || '').localeCompare(String(b.studentName || ''));
-                if (nameCmp !== 0) return nameCmp;
-                return String(a.admissionNumber || '').localeCompare(String(b.admissionNumber || ''));
+                const pinA = String(a.pinNo || a.pin_no || '').trim();
+                const pinB = String(b.pinNo || b.pin_no || '').trim();
+                const isInvalidA = !pinA || pinA === '-';
+                const isInvalidB = !pinB || pinB === '-';
+
+                if (isInvalidA && !isInvalidB) return 1;
+                if (!isInvalidA && isInvalidB) return -1;
+                if (!isInvalidA && !isInvalidB) {
+                    const pinCmp = pinA.localeCompare(pinB, undefined, { numeric: true, sensitivity: 'base' });
+                    if (pinCmp !== 0) return pinCmp;
+                }
+
+                const admA = String(a.admissionNumber || a.admission_number || '').trim();
+                const admB = String(b.admissionNumber || b.admission_number || '').trim();
+                const admCmp = admA.localeCompare(admB, undefined, { numeric: true, sensitivity: 'base' });
+                if (admCmp !== 0) return admCmp;
+
+                return String(a.studentName || a.student_name || '').localeCompare(String(b.studentName || b.student_name || ''));
             });
 
             // Union of fee heads across all students (identical to PDF template)
@@ -705,6 +748,20 @@ const OverallConcession = () => {
                         });
                     }
                 });
+                if (includeNormalFees) {
+                    (req.standardFees || []).forEach((sf) => {
+                        const yr = Number(sf.studentYear);
+                        if (Number.isFinite(yr) && yr > 0) yearsSet.add(yr);
+
+                        const hid = String(sf.feeHeadId);
+                        if (!feeHeadMap.has(hid)) {
+                            feeHeadMap.set(hid, {
+                                name: sf.feeHeadName || sf.feeHeadCode || hid,
+                                code: sf.feeHeadCode || ''
+                            });
+                        }
+                    });
+                }
             });
 
             // Calculate popularity of fee heads across students
@@ -716,6 +773,14 @@ const OverallConcession = () => {
                         feeHeadPopularity[hid] = (feeHeadPopularity[hid] || 0) + 1;
                     }
                 });
+                if (includeNormalFees) {
+                    (req.standardFees || []).forEach((sf) => {
+                        const hid = String(sf.feeHeadId);
+                        if (hid) {
+                            feeHeadPopularity[hid] = (feeHeadPopularity[hid] || 0) + 1;
+                        }
+                    });
+                }
             });
 
             const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) => {
@@ -736,10 +801,12 @@ const OverallConcession = () => {
             }
 
             const amountLookup = {};
+            const standardLookup = {};
             const remarksLookup = {};
             sortedReqs.forEach((req) => {
                 const adm = String(req.admissionNumber || '');
                 if (!amountLookup[adm]) amountLookup[adm] = {};
+                if (!standardLookup[adm]) standardLookup[adm] = {};
                 if (!remarksLookup[adm]) remarksLookup[adm] = {};
                 (req.concessions || []).forEach((c) => {
                     const hid = String(c.feeHeadId);
@@ -753,6 +820,14 @@ const OverallConcession = () => {
                         remarksLookup[adm][yr] = c.remarks;
                     }
                 });
+                if (includeNormalFees) {
+                    (req.standardFees || []).forEach((sf) => {
+                        const hid = String(sf.feeHeadId);
+                        const yr = Number(sf.studentYear);
+                        if (!standardLookup[adm][hid]) standardLookup[adm][hid] = {};
+                        standardLookup[adm][hid][yr] = Number(sf.amount ?? 0);
+                    });
+                }
             });
 
             const yrSfx = (yr) => yr === 1 ? '1st' : yr === 2 ? '2nd' : yr === 3 ? '3rd' : `${yr}th`;
@@ -767,9 +842,13 @@ const OverallConcession = () => {
 
             const totalCols = Math.max(6, 5 + feeHeadEntries.length + 1);
 
+            const reportSubtitle = includeNormalFees
+                ? 'OVERALL CONCESSION & STANDARD FEE STRUCTURE — COMBINED OVERVIEW'
+                : 'OVERALL CONCESSION (REVISED FEES) — OVERVIEW';
+
             const aoa = [
                 ['PYDAH GROUP OF COLLEGES'],
-                ['OVERALL CONCESSION (REVISED FEES) — OVERVIEW'],
+                [reportSubtitle],
                 [`Filter: ${filterLabel} | Total Students: ${sortedReqs.length} | Generated On: ${new Date().toLocaleString('en-IN')}`],
                 [],
                 [
@@ -792,16 +871,28 @@ const OverallConcession = () => {
             sortedReqs.forEach((req, sIdx) => {
                 const adm = String(req.admissionNumber || '');
                 const studentAmounts = amountLookup[adm] || {};
+                const studentStandards = standardLookup[adm] || {};
                 const startRow = aoa.length;
 
                 years.forEach((yr, yrIdx) => {
                     const feeCols = feeHeadEntries.map(([fhId]) => {
                         const cell = studentAmounts[fhId]?.[yr];
-                        if (!cell) return '—';
-                        const amt = Number(cell.amount ?? 0);
-                        const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
-                        const tagText = isConc ? 'Conc.' : 'Rev.';
-                        return `${isConc ? '-' : ''}₹${amt.toLocaleString('en-IN')} (${tagText})`;
+                        const stdAmt = studentStandards[fhId]?.[yr];
+
+                        // If student had fee structure for the head and revised also, consider revised or concession
+                        if (cell) {
+                            const amt = Number(cell.amount ?? 0);
+                            const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
+                            const tagText = isConc ? 'Conc.' : 'Rev.';
+                            return `${isConc ? '-' : ''}₹${amt.toLocaleString('en-IN')} (${tagText})`;
+                        }
+
+                        // If normal fee structure exists, display standard fee amount without tags
+                        if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                            return `₹${stdAmt.toLocaleString('en-IN')}`;
+                        }
+
+                        return '—';
                     });
 
                     const remarks = remarksLookup[adm]?.[yr] || '—';
@@ -967,7 +1058,7 @@ const OverallConcession = () => {
             const fileCourse = (filters.course || 'Course').replace(/[^a-zA-Z0-9_-]/g, '_');
             const fileBatch = (filters.batch || 'Batch').replace(/[^a-zA-Z0-9_-]/g, '_');
             const fileScope = mode === 'revised' ? 'RevisedOnly' : 'All';
-            const fileName = `Overall_Concessions_${fileCollege}_${fileCourse}_${fileBatch}_${fileScope}.xlsx`;
+            const fileName = `Overall_Concessions_${fileCollege}_${fileCourse}_${fileBatch}_${fileScope}${includeNormalFees ? '_Combined' : ''}.xlsx`;
 
             XLSX.writeFile(wb, fileName);
             setDownloadModalOpen(false);
@@ -2121,6 +2212,17 @@ const OverallConcession = () => {
                                     }
                                 }
                             });
+                            if (includeNormalFees) {
+                                (s.standardFees || []).forEach(sf => {
+                                    const fhId = normalizeFeeHeadId(sf.feeHeadId);
+                                    if (fhId) {
+                                        feeHeadPopularity[fhId] = (feeHeadPopularity[fhId] || 0) + 1;
+                                        if (!unionFeeHeads.includes(fhId)) {
+                                            unionFeeHeads.push(fhId);
+                                        }
+                                    }
+                                });
+                            }
                         });
 
                         unionFeeHeads.sort((a, b) => {
@@ -2174,6 +2276,16 @@ const OverallConcession = () => {
                                             </button>
                                         </div>
                                     )}
+
+                                    <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer select-none px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg shadow-xs hover:border-slate-300 transition" title="Toggle normal fee structure heads in overview and downloads">
+                                        <input
+                                            type="checkbox"
+                                            checked={includeNormalFees}
+                                            onChange={(e) => setIncludeNormalFees(e.target.checked)}
+                                            className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                        />
+                                        <span>Include Fee Structure</span>
+                                    </label>
 
                                     <button
                                         type="button"
@@ -2275,12 +2387,25 @@ const OverallConcession = () => {
                                                     byHead[fhId].type = rf.concessionType || byHead[fhId].type;
                                                 });
 
+                                                const standardByHead = {};
+                                                if (includeNormalFees) {
+                                                    (s.standardFees || []).forEach(sf => {
+                                                        const fhId = normalizeFeeHeadId(sf.feeHeadId);
+                                                        if (!fhId) return;
+                                                        const yr = Number(sf.studentYear);
+                                                        if (Number.isFinite(yr) && yr > 0) yearsSet.add(yr);
+                                                        if (!standardByHead[fhId]) standardByHead[fhId] = {};
+                                                        standardByHead[fhId][yr] = Number(sf.amount ?? 0);
+                                                    });
+                                                }
+
                                                 const years = [...yearsSet].sort((a, b) => a - b);
                                                 const courseDur = courseYears[s.course] || (years.length ? Math.max(...years) : 0);
                                                 const displayYears = courseDur > 0
                                                     ? Array.from({ length: courseDur }, (_, i) => i + 1)
                                                     : years;
                                                 const hasConcessions = (s.revisedFees || []).length > 0;
+                                                const hasDisplayData = hasConcessions || (includeNormalFees && (s.standardFees || []).length > 0);
 
                                                 return (
                                                     <tr key={s.admission_number} className="hover:bg-slate-50/30 align-top">
@@ -2289,7 +2414,7 @@ const OverallConcession = () => {
                                                             <div className="text-slate-500 mt-0.5 font-medium">Pin: <span className="font-semibold text-slate-700">{s.pin_no}</span> | Adm: {s.admission_number}</div>
                                                         </td>
                                                         <td className="p-4">
-                                                            {hasConcessions ? (
+                                                            {hasDisplayData ? (
                                                                 <div className="overflow-x-auto">
                                                                     <table className="w-full text-[11px] border-collapse border border-slate-200 rounded-lg overflow-hidden table-fixed min-w-[600px]">
                                                                         <thead>
@@ -2318,18 +2443,37 @@ const OverallConcession = () => {
                                                                                         </td>
                                                                                         {unionFeeHeads.map(fhId => {
                                                                                             const cell = byHead[fhId]?.years?.[yr];
-                                                                                            return (
-                                                                                                <td key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
-                                                                                                    {cell ? (
-                                                                                                        <span className={cell.type === 'CONCESSION' ? 'text-amber-700' : 'text-emerald-700'} title={cell.remarks || undefined}>
-                                                                                                            {cell.type === 'CONCESSION' ? '-' : ''}₹{Number(cell.amount).toLocaleString('en-IN')}
-                                                                                                            <span className={`ml-1 px-1 py-0.5 rounded text-[8px] font-bold border ${cell.type === 'CONCESSION' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
-                                                                                                                {cell.type === 'CONCESSION' ? 'Conc.' : 'Rev.'}
+                                                                                            const stdAmt = standardByHead[fhId]?.[yr];
+
+                                                                                            // If revised or concession exists, consider it
+                                                                                            if (cell) {
+                                                                                                const isConc = cell.type === 'CONCESSION';
+                                                                                                return (
+                                                                                                    <td key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                        <span className={isConc ? 'text-amber-700' : 'text-emerald-700'} title={cell.remarks || undefined}>
+                                                                                                            {isConc ? '-' : ''}₹{Number(cell.amount).toLocaleString('en-IN')}
+                                                                                                            <span className={`ml-1 px-1 py-0.5 rounded text-[8px] font-bold border ${isConc ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                                                                                                {isConc ? 'Conc.' : 'Rev.'}
                                                                                                             </span>
                                                                                                         </span>
-                                                                                                    ) : (
-                                                                                                        <span className="text-slate-300 font-normal">—</span>
-                                                                                                    )}
+                                                                                                    </td>
+                                                                                                );
+                                                                                            }
+
+                                                                                            // If normal fee structure exists, display standard fee amount without tags
+                                                                                            if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                                                                                                return (
+                                                                                                    <td key={fhId} className="px-3 py-2 text-center font-semibold text-slate-800 border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                        <span title="Standard Fee Structure">
+                                                                                                            ₹{stdAmt.toLocaleString('en-IN')}
+                                                                                                        </span>
+                                                                                                    </td>
+                                                                                                );
+                                                                                            }
+
+                                                                                            return (
+                                                                                                <td key={fhId} className="px-3 py-2 text-center border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                    <span className="text-slate-300 font-normal">—</span>
                                                                                                 </td>
                                                                                             );
                                                                                         })}
@@ -2418,6 +2562,28 @@ const OverallConcession = () => {
                                                     </span>
                                                 </button>
                                             </div>
+                                        </div>
+
+                                        {/* Include Normal Fee Structure Option */}
+                                        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between">
+                                            <div className="pr-3">
+                                                <label htmlFor="incNormalFeesModal" className="text-xs font-bold text-slate-800 cursor-pointer select-none">
+                                                    Include Normal Fee Structure Heads
+                                                </label>
+                                                <p className="text-[11px] text-slate-500 font-medium">
+                                                    Combined report with standard fee structure & concessions
+                                                </p>
+                                            </div>
+                                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                                <input
+                                                    id="incNormalFeesModal"
+                                                    type="checkbox"
+                                                    checked={includeNormalFees}
+                                                    onChange={(e) => setIncludeNormalFees(e.target.checked)}
+                                                    className="sr-only peer"
+                                                />
+                                                <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </label>
                                         </div>
 
                                         {/* Format Cards - Just Icons with Name Below */}
