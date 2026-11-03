@@ -385,8 +385,48 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                         const cell = studentAmounts[fhId]?.[yr];
                                         const stdAmt = studentStandards[fhId]?.[yr];
 
-                                        // If revised or concession exists, consider it (with tag)
-                                        if (cell) {
+                                        const hasStd = includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0;
+                                        const hasConc = Boolean(cell);
+
+                                        // If student had normal structure and revised/concession also, display both in the same column
+                                        if (hasStd && hasConc) {
+                                            const amt = Number(cell.amount ?? 0);
+                                            const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
+                                            const tagText = isConc ? 'Conc.' : 'Rev.';
+                                            const tagBg = isConc ? '#fffbe6' : '#e6f4ea';
+                                            const tagColor = isConc ? '#d97706' : '#166534';
+                                            const tagBorder = isConc ? '#fef3c7' : '#bbf7d0';
+
+                                            return (
+                                                <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, padding: '3px 4px', lineHeight: '1.2' }}>
+                                                    <div style={{ fontSize: '8px', color: '#475569' }}>
+                                                        <span style={{ fontSize: '7px', color: '#64748b', fontWeight: '700' }}>Org: </span>₹{fmt(stdAmt)}
+                                                    </div>
+                                                    <div style={{ marginTop: '2px', fontWeight: '700' }}>
+                                                        <span style={{ color: isConc ? '#b45309' : '#047857', fontSize: '8.5px' }}>
+                                                            {isConc ? '-' : ''}₹{fmt(amt)}
+                                                        </span>
+                                                        <span style={{
+                                                            marginLeft: '2px',
+                                                            padding: '0px 2px',
+                                                            borderRadius: '2px',
+                                                            fontSize: '6.5px',
+                                                            fontWeight: '800',
+                                                            background: tagBg,
+                                                            color: tagColor,
+                                                            border: `1px solid ${tagBorder}`,
+                                                            display: 'inline-block',
+                                                            verticalAlign: 'middle'
+                                                        }}>
+                                                            {tagText}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+
+                                        // If only revised or concession exists
+                                        if (hasConc) {
                                             const amt = Number(cell.amount ?? 0);
                                             const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
                                             const tagText = isConc ? 'Conc.' : 'Rev.';
@@ -417,8 +457,8 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                             );
                                         }
 
-                                        // In combined mode, if standard fee structure exists for this head, display it without tags
-                                        if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                                        // If only normal fee structure exists, display standard fee amount without tags
+                                        if (hasStd) {
                                             return (
                                                 <td key={`${adm}_${yr}_${fhId}`} style={{ ...cellBorder, fontWeight: '600', color: '#1e293b' }}>
                                                     ₹{fmt(stdAmt)}

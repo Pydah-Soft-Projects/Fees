@@ -877,16 +877,27 @@ const OverallConcession = () => {
                         const cell = studentAmounts[fhId]?.[yr];
                         const stdAmt = studentStandards[fhId]?.[yr];
 
-                        // If student had fee structure for the head and revised also, consider revised or concession
-                        if (cell) {
+                        const hasStd = includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0;
+                        const hasConc = Boolean(cell);
+
+                        // If student had normal structure and revised/concession also, display both in the same column
+                        if (hasStd && hasConc) {
+                            const amt = Number(cell.amount ?? 0);
+                            const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
+                            const tagText = isConc ? 'Conc.' : 'Rev.';
+                            return `Org: ₹${stdAmt.toLocaleString('en-IN')} | ${tagText}: ${isConc ? '-' : ''}₹${amt.toLocaleString('en-IN')}`;
+                        }
+
+                        // If only revised or concession exists
+                        if (hasConc) {
                             const amt = Number(cell.amount ?? 0);
                             const isConc = String(cell.type || '').toUpperCase() === 'CONCESSION';
                             const tagText = isConc ? 'Conc.' : 'Rev.';
                             return `${isConc ? '-' : ''}₹${amt.toLocaleString('en-IN')} (${tagText})`;
                         }
 
-                        // If normal fee structure exists, display standard fee amount without tags
-                        if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                        // If only normal fee structure exists, display standard fee amount without tags
+                        if (hasStd) {
                             return `₹${stdAmt.toLocaleString('en-IN')}`;
                         }
 
@@ -930,7 +941,11 @@ const OverallConcession = () => {
                 { wch: 16 }, // PIN No
                 { wch: 12 }, // Quota
                 { wch: 12 }, // Year
-                ...feeHeadEntries.map(([_, row]) => ({ wch: Math.max(16, (row.name || '').length + 4) })),
+                ...feeHeadEntries.map(([_, row]) => ({
+                    wch: includeNormalFees
+                        ? Math.max(26, (row.name || '').length + 6)
+                        : Math.max(16, (row.name || '').length + 4)
+                })),
                 { wch: 25 }  // Remarks
             ];
 
@@ -2441,8 +2456,29 @@ const OverallConcession = () => {
                                                                                             const cell = byHead[fhId]?.years?.[yr];
                                                                                             const stdAmt = standardByHead[fhId]?.[yr];
 
-                                                                                            // If revised or concession exists, consider it
-                                                                                            if (cell) {
+                                                                                            const hasStd = includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0;
+                                                                                            const hasConc = Boolean(cell);
+
+                                                                                            // If student had normal structure and revised/concession also, display both in the same column
+                                                                                            if (hasStd && hasConc) {
+                                                                                                const isConc = cell.type === 'CONCESSION';
+                                                                                                return (
+                                                                                                    <td key={fhId} className="px-3 py-2 text-center border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
+                                                                                                        <div className="text-[10px] text-slate-500 font-medium leading-tight">
+                                                                                                            <span className="text-[9px] text-slate-400 font-bold">Org: </span>₹{stdAmt.toLocaleString('en-IN')}
+                                                                                                        </div>
+                                                                                                        <div className={`text-[11px] font-bold leading-tight mt-0.5 ${isConc ? 'text-amber-700' : 'text-emerald-700'}`} title={cell.remarks || undefined}>
+                                                                                                            {isConc ? '-' : ''}₹{Number(cell.amount).toLocaleString('en-IN')}
+                                                                                                            <span className={`ml-1 px-1 py-0.5 rounded text-[8px] font-bold border ${isConc ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
+                                                                                                                {isConc ? 'Conc.' : 'Rev.'}
+                                                                                                            </span>
+                                                                                                        </div>
+                                                                                                    </td>
+                                                                                                );
+                                                                                            }
+
+                                                                                            // If only revised or concession exists
+                                                                                            if (hasConc) {
                                                                                                 const isConc = cell.type === 'CONCESSION';
                                                                                                 return (
                                                                                                     <td key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
@@ -2456,11 +2492,11 @@ const OverallConcession = () => {
                                                                                                 );
                                                                                             }
 
-                                                                                            // If normal fee structure exists, display standard fee amount without tags
-                                                                                            if (includeNormalFees && Number.isFinite(stdAmt) && stdAmt > 0) {
+                                                                                            // If only normal fee structure exists, display standard fee amount without tags
+                                                                                            if (hasStd) {
                                                                                                 return (
                                                                                                     <td key={fhId} className="px-3 py-2 text-center font-semibold text-slate-800 border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px]">
-                                                                                                        <span title="Standard Fee Structure">
+                                                                                                        <span>
                                                                                                             ₹{stdAmt.toLocaleString('en-IN')}
                                                                                                         </span>
                                                                                                     </td>
