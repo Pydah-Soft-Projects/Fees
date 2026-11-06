@@ -273,7 +273,7 @@ const About = () => {
     const ActiveIcon = activeModule.icon;
 
     return (
-        <div className="min-h-screen bg-slate-50 font-sans text-gray-800 flex flex-col">
+        <div className="min-h-screen font-sans flex flex-col" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             {/* Top Bar */}
             <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-gray-200 px-6 py-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -286,7 +286,7 @@ const About = () => {
                         <div className="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
                             <Info size={18} />
                         </div>
-                        <span className="font-bold text-slate-800 tracking-tight">About Pydah Fees</span>
+                        <span className="font-bold text-slate-800 tracking-tight">About Campo Fees</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -448,7 +448,7 @@ const About = () => {
             </div>
 
             <footer className="border-t border-slate-200 py-6 px-6 text-center text-xs text-slate-400">
-                © {new Date().getFullYear()} Pydah Group · Pydah Fees System
+                © {new Date().getFullYear()} Campo Group · Campo Fees System
             </footer>
         </div>
     );

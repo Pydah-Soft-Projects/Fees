@@ -167,7 +167,7 @@ const AcademicCalendar = () => {
 
     if (!hasPermission) {
         return (
-            <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+            <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <Sidebar />
                 <div className="flex-1 flex items-center justify-center p-6">
                     <div className="bg-white p-8 rounded-3xl shadow-xl border border-red-100 max-w-md w-full text-center animate-in fade-in zoom-in duration-300">
@@ -666,7 +666,7 @@ const AcademicCalendar = () => {
     td { border: 1.5px solid #000; padding: 5px 8px; font-size: 11px; }
 </style>
 </head><body>
-<h1>Pydah Group of Colleges</h1>
+<h1>Campo Group of Colleges</h1>
 <h2>Academic Calendar</h2>
 <div class="meta">
     <span>Filter: <strong>${filterLabel}</strong></span>
@@ -747,7 +747,7 @@ const AcademicCalendar = () => {
     td { border: 1.5px solid #000; padding: 5px 8px; font-size: 11px; }
 </style>
 </head><body>
-<h1>Pydah Group of Colleges</h1>
+<h1>Campo Group of Colleges</h1>
 <h2>Term Dues Calendar</h2>
 <div class="meta">
     <span>Filter: <strong>${filterLabel}</strong></span>
@@ -772,7 +772,7 @@ const AcademicCalendar = () => {
 
     // ════════════════════════════════════════════════════════════════════
     return (
-        <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
                 {/* Header */}

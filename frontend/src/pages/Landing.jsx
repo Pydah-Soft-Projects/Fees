@@ -73,7 +73,7 @@ const Landing = () => {
                 <div className="flex items-center gap-3.5 select-none">
                     <div className="border-[2px] border-blue-700 px-3.5 py-1.5 rounded-tl-[12px] rounded-br-[12px] rounded-tr-[2px] rounded-bl-[2px] relative flex items-center justify-center leading-none bg-blue-50/50">
                         <span className="text-base font-extrabold text-blue-700 tracking-wider font-sans">
-                            PYDAH
+                            CAMPO
                         </span>
                     </div>
                 </div>
@@ -147,7 +147,7 @@ const Landing = () => {
                                     <div className="w-3 h-3 rounded-full bg-green-400/80"></div>
                                 </div>
                                 <div className="ml-2 sm:ml-3 flex-1 h-4 sm:h-5 bg-gray-100 rounded-md text-[8px] sm:text-[9px] text-gray-400 flex items-center px-2 font-mono">
-                                    auth.pydah.edu/dashboard
+                                    auth.campo.edu/dashboard
                                 </div>
                             </div>
 
@@ -236,8 +236,8 @@ const Landing = () => {
             {/* Footer */}
             <footer className="bg-slate-50 border-t border-slate-200 py-2 sm:py-3 md:py-4 px-4 sm:px-6 md:px-8 lg:px-12">
                 <div className="w-full mx-auto flex flex-col md:flex-row justify-between items-center opacity-60 hover:opacity-100 transition-opacity text-xs sm:text-sm">
-                    <p className="font-bold text-slate-900 tracking-tight">Pydah<span className="text-blue-600">Fees</span> System</p>
-                    <p className="text-[10px] sm:text-xs text-slate-500">© 2025 Pydah Group. Internal Use Only.</p>
+                    <p className="font-bold text-slate-900 tracking-tight">Campo<span className="text-blue-600">Fees</span> System</p>
+                    <p className="text-[10px] sm:text-xs text-slate-500">© 2025 Campo Group. Internal Use Only.</p>
                 </div>
             </footer>
         </div>

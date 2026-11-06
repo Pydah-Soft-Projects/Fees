@@ -193,7 +193,7 @@ const Login = () => {
                                         <span className="w-[5px] h-[5px] rounded-full bg-white opacity-75 mt-1.5"></span>
                                     </div>
                                     <span className="text-4xl font-black text-white tracking-widest font-sans">
-                                        PYDAH
+                                        CAMPO
                                     </span>
                                 </div>
                             </div>

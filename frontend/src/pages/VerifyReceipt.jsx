@@ -33,16 +33,16 @@ const VerifyReceipt = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mb-4" />
-                <p className="text-gray-600 font-medium">Verifying receipt authenticity...</p>
+                <p className="font-medium" style={{ color: 'var(--text-secondary)' }}>Verifying receipt authenticity...</p>
             </div>
         );
     }
 
     if (error || !data) {
         return (
-            <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+            <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full text-center border border-red-100">
                     <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -62,11 +62,11 @@ const VerifyReceipt = () => {
     const totalPaid = transactions.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
 
     return (
-        <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-start">
-            {/* Header / Pydah Logo area */}
+        <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-start" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
+            {/* Header / Campo Logo area */}
             <div className="w-full max-w-2xl text-center mb-6">
-                <img src="/PYDAH_LOGO_PHOTO.jpg" alt="Pydah Group Logo" className="h-16 mx-auto mb-2 object-contain" />
-                <h2 className="text-xs uppercase tracking-widest text-gray-500 font-bold">Pydah Group of Institutions</h2>
+                <img src="/PYDAH_LOGO_PHOTO.jpg" alt="Campo Group Logo" className="h-16 mx-auto mb-2 object-contain" />
+                <h2 className="text-xs uppercase tracking-widest text-gray-500 font-bold">Campo Group of Institutions</h2>
             </div>
 
             {/* Main verification card */}
@@ -182,7 +182,7 @@ const VerifyReceipt = () => {
                 {/* Note preservation & branding */}
                 <div className="bg-gray-50 px-6 py-4 border-t border-gray-150 flex flex-col sm:flex-row items-center justify-between gap-2 text-[10px] text-gray-400">
                     <span className="font-medium">Note: System-generated verification record. No signature required.</span>
-                    <span className="italic font-semibold text-gray-400">Powered by PydahSoft Portal</span>
+                    <span className="italic font-semibold text-gray-400">Powered by CampoSoft Portal</span>
                 </div>
             </div>
         </div>

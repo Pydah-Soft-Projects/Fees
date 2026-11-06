@@ -1100,7 +1100,7 @@ const ConcessionManagement = () => {
 
     if (!hasPermission) {
         return (
-            <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+            <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <Sidebar isOpenMobile={isOpenMobile} onCloseMobile={() => setIsOpenMobile(false)} />
                 <div className="flex-1 flex items-center justify-center p-4 sm:p-6">
                     <div className="bg-white p-6 sm:p-8 rounded-3xl shadow-xl border border-red-100 max-w-md w-full text-center animate-in fade-in zoom-in duration-300">
@@ -1126,7 +1126,7 @@ const ConcessionManagement = () => {
     const isSuperAdmin = user?.role === 'superadmin';
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar isOpenMobile={isOpenMobile} onCloseMobile={() => setIsOpenMobile(false)} />
             <div className="flex-1 flex flex-col h-full overflow-y-auto min-w-0">
                 {/* Header Section */}

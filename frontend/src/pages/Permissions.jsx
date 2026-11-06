@@ -81,7 +81,7 @@ const Permissions = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 p-6">
                 <header className="mb-6">

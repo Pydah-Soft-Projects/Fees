@@ -3088,7 +3088,7 @@ const Proceedings = () => {
 
     if (!canView) {
         return (
-            <div className="flex min-h-screen bg-slate-50 font-sans">
+            <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <Sidebar />
                 <div className="flex-1 p-6 flex items-center justify-center">
                     <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm text-center max-w-sm">
@@ -3105,7 +3105,7 @@ const Proceedings = () => {
     }
 
     return (
-        <div className="flex min-h-screen bg-slate-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6">
                 <div className="w-full max-w-full">

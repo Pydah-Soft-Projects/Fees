@@ -614,7 +614,7 @@ const UserManagement = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 min-w-0 p-4 md:p-6">
                 <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">

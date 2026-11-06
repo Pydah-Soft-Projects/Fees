@@ -5,8 +5,37 @@
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000000'%3E%3Cpath d='M12 3L1 9l11 6 9-4.91V17h2V9M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z'/%3E%3C/svg%3E" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://crm.pydah.edu.in https://checkout.razorpay.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://static.wixstatic.com https://api.qrserver.com https://*.amazonaws.com https://*.s3.amazonaws.com https://crm.pydah.edu.in; connect-src 'self' http://localhost:* http://127.0.0.1:* https://crm.pydah.edu.in https://api.razorpay.com https://*.amazonaws.com https://*.s3.amazonaws.com ws: wss:; frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com blob: data:; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self';" />
-    <title>Pydah Fee Management</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://crm.pydah.edu.in https://checkout.razorpay.com https://cdn.jsdelivr.net https://ui-theme.pydah.edu.in http://localhost:7000; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://ui-theme.pydah.edu.in http://localhost:7000; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://static.wixstatic.com https://api.qrserver.com https://*.amazonaws.com https://*.s3.amazonaws.com https://crm.pydah.edu.in; connect-src 'self' http://localhost:* http://127.0.0.1:* https://crm.pydah.edu.in https://api.razorpay.com https://*.amazonaws.com https://*.s3.amazonaws.com https://ui-theme.pydah.edu.in ws: wss:; frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com blob: data:; worker-src 'self' blob: https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self';" />
+    <title>Campo Fee Management</title>
+    <!-- Centralized Theme Runtime Loader SDK (Auto-switches between Local Editor and Production) -->
+    <script>
+      (function() {
+        var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        var serverUrl = isLocal ? 'http://localhost:7000' : 'https://ui-theme.pydah.edu.in';
+        var pollInterval = isLocal ? '5' : '30';
+
+        var script = document.createElement('script');
+        script.id = 'pydah-central-theme-loader';
+        script.src = serverUrl + '/themes/theme-loader.js';
+        script.setAttribute('data-theme-server', serverUrl);
+        script.setAttribute('data-poll-interval', pollInterval);
+
+        if (isLocal) {
+          script.onerror = function() {
+            console.warn('[ThemeLoader] Local theme server (port 7000) not reached, falling back to production theme server.');
+            var fallback = document.createElement('script');
+            fallback.src = 'https://ui-theme.pydah.edu.in/themes/theme-loader.js';
+            fallback.setAttribute('data-theme-server', 'https://ui-theme.pydah.edu.in');
+            fallback.setAttribute('data-poll-interval', '30');
+            document.head.appendChild(fallback);
+          };
+        }
+
+        document.head.appendChild(script);
+      })();
+    </script>
+    <!-- Centralized Distributable CSS Fallback -->
+    <link rel="stylesheet" href="https://ui-theme.pydah.edu.in/themes/theme.css" />
     <!-- Legacy browser polyfills (Chrome <= 121, Windows 7 compatibility) -->
     <script>
       (function() {
