@@ -601,6 +601,7 @@ const OverallConcession = () => {
             course: s.course,
             branch: s.branch,
             batch: s.batch,
+            meritStatusRecords: s.meritStatusRecords || s.merit_status || [],
             concessions: (s.revisedFees || [])
                 .map(rf => {
                     const fhId = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
@@ -682,6 +683,7 @@ const OverallConcession = () => {
                 course: s.course,
                 branch: s.branch,
                 batch: s.batch,
+                meritStatusRecords: s.meritStatusRecords || s.merit_status || [],
                 concessions: (s.revisedFees || [])
                     .map(rf => {
                         const fhId = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
@@ -800,11 +802,21 @@ const OverallConcession = () => {
             const amountLookup = {};
             const standardLookup = {};
             const remarksLookup = {};
+            const meritLookup = {};
             sortedReqs.forEach((req) => {
                 const adm = String(req.admissionNumber || '');
                 if (!amountLookup[adm]) amountLookup[adm] = {};
                 if (!standardLookup[adm]) standardLookup[adm] = {};
                 if (!remarksLookup[adm]) remarksLookup[adm] = {};
+                if (!meritLookup[adm]) meritLookup[adm] = {};
+
+                (req.meritStatusRecords || req.merit_status || []).forEach((m) => {
+                    const yr = Number(m.student_year);
+                    if (Number.isFinite(yr) && yr > 0) {
+                        meritLookup[adm][yr] = String(m.merit_status || '').trim().toUpperCase();
+                    }
+                });
+
                 (req.concessions || []).forEach((c) => {
                     const hid = String(c.feeHeadId);
                     const yr = Number(c.studentYear);
@@ -837,7 +849,7 @@ const OverallConcession = () => {
             if (viewQuotaFilter) filterParts.push(`Quota: ${viewQuotaFilter}`);
             const filterLabel = filterParts.length ? filterParts.join(' · ') : 'All Colleges / Courses / Branches';
 
-            const totalCols = Math.max(7, 6 + feeHeadEntries.length + 1);
+            const totalCols = Math.max(8, 7 + feeHeadEntries.length + 1);
 
             const reportSubtitle = includeNormalFees
                 ? 'OVERALL CONCESSION & STANDARD FEE STRUCTURE — COMBINED OVERVIEW'
@@ -855,6 +867,7 @@ const OverallConcession = () => {
                     'PIN No',
                     'Quota',
                     'Year',
+                    'Merit',
                     ...feeHeadEntries.map(([_, row]) => row.name || 'Fee Head'),
                     'Remarks'
                 ]
@@ -905,6 +918,7 @@ const OverallConcession = () => {
                     });
 
                     const remarks = remarksLookup[adm]?.[yr] || '—';
+                    const meritVal = meritLookup[adm]?.[yr] || '—';
 
                     aoa.push([
                         yrIdx === 0 ? sIdx + 1 : '',
@@ -913,6 +927,7 @@ const OverallConcession = () => {
                         yrIdx === 0 ? (req.pinNo || '—') : '',
                         yrIdx === 0 ? (req.quota || '—') : '',
                         `${yrSfx(yr)} Yr`,
+                        meritVal,
                         ...feeCols,
                         remarks
                     ]);
@@ -929,8 +944,6 @@ const OverallConcession = () => {
             });
 
             aoa.push([]);
-            aoa.push(['LEGEND:  ■ Revised Fee (Green)   |   ■ Concession (Amber)   |   ■ Standard Fee Structure (Slate Gray)']);
-            merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: totalCols - 1 } });
             aoa.push(['This is a computer-generated Overall Concession Report for internal records only.']);
             merges.push({ s: { r: aoa.length - 1, c: 0 }, e: { r: aoa.length - 1, c: totalCols - 1 } });
 
@@ -943,6 +956,7 @@ const OverallConcession = () => {
                 { wch: 16 }, // PIN No
                 { wch: 12 }, // Quota
                 { wch: 12 }, // Year
+                { wch: 10 }, // Merit
                 ...feeHeadEntries.map(([_, row]) => ({
                     wch: includeNormalFees
                         ? Math.max(26, (row.name || '').length + 6)
@@ -1052,10 +1066,26 @@ const OverallConcession = () => {
                             alignH = 'center';
                             fontColor = '334155';
                             isBold = true;
+                        } else if (c === 6) { // Merit
+                            alignH = 'center';
+                            const mUpper = val.toUpperCase().trim();
+                            if (mUpper === 'YES') {
+                                fontColor = '047857'; // Deep Green
+                                cellBg = 'DCFCE7';    // Soft light emerald fill
+                                isBold = true;
+                            } else if (mUpper === 'NO') {
+                                fontColor = 'B91C1C'; // Red
+                                cellBg = 'FEE2E2';    // Soft light rose fill
+                                isBold = true;
+                            } else {
+                                fontColor = '94A3B8';
+                                cellBg = bgRgb;
+                                isBold = false;
+                            }
                         } else if (c === totalCols - 1) { // Remarks
                             alignH = 'left';
                             fontColor = val === '—' ? '94A3B8' : '334155';
-                        } else { // Fee heads (c >= 6 && c < totalCols - 1)
+                        } else { // Fee heads (c >= 7 && c < totalCols - 1)
                             alignH = 'center';
                             const isConc = val.includes('Conc') || val.includes('(Conc.)');
                             const isRev = val.includes('Rev') || val.includes('(Rev.)');
@@ -1088,22 +1118,6 @@ const OverallConcession = () => {
                     }
                 });
             });
-
-            // Style Legend Row
-            const legendRowIdx = aoa.length - 2;
-            for (let c = 0; c < totalCols; c++) {
-                const ref = XLSX.utils.encode_cell({ r: legendRowIdx, c });
-                if (!ws[ref]) ws[ref] = { t: 's', v: '' };
-                ws[ref].s = {
-                    fill: { fgColor: { rgb: 'F1F5F9' } },
-                    font: { name: 'Arial', sz: 9, bold: true, color: { rgb: '334155' } },
-                    alignment: { horizontal: 'center', vertical: 'center' },
-                    border: {
-                        top: { style: 'thin', color: { rgb: 'CBD5E1' } },
-                        bottom: { style: 'thin', color: { rgb: 'CBD5E1' } }
-                    }
-                };
-            }
 
             // Style Footer Note
             const footerRowIdx = aoa.length - 1;
@@ -2480,6 +2494,7 @@ const OverallConcession = () => {
                                                                         <thead>
                                                                             <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase">
                                                                                 <th className="px-3 py-2 text-left font-bold border border-slate-200 w-[120px] min-w-[120px]">Academic Year</th>
+                                                                                <th className="px-3 py-2 text-center font-bold border border-slate-200 w-[80px] min-w-[80px]">Merit</th>
                                                                                 {unionFeeHeads.map(fhId => (
                                                                                     <th key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px] truncate" title={getFeeHeadName(fhId)}>
                                                                                         {getFeeHeadName(fhId)}
@@ -2500,6 +2515,27 @@ const OverallConcession = () => {
                                                                                     <tr key={yr} className="bg-white">
                                                                                         <td className="px-3 py-2 font-semibold text-slate-800 border border-slate-200 whitespace-nowrap text-left w-[120px] min-w-[120px]">
                                                                                             {getYearSuffix(yr)} Year
+                                                                                        </td>
+                                                                                        <td className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[80px] min-w-[80px]">
+                                                                                            {(() => {
+                                                                                                const merits = s.meritStatusRecords || s.merit_status || [];
+                                                                                                const yrMerit = merits.find(m => Number(m.student_year) === yr);
+                                                                                                const val = yrMerit?.merit_status ? String(yrMerit.merit_status).trim().toLowerCase() : '';
+                                                                                                if (val === 'yes') {
+                                                                                                    return (
+                                                                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                                                                            YES
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                } else if (val === 'no') {
+                                                                                                    return (
+                                                                                                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                                                                                            NO
+                                                                                                        </span>
+                                                                                                    );
+                                                                                                }
+                                                                                                return <span className="text-slate-300 font-normal">—</span>;
+                                                                                            })()}
                                                                                         </td>
                                                                                         {unionFeeHeads.map(fhId => {
                                                                                             const cell = byHead[fhId]?.years?.[yr];

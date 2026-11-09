@@ -348,6 +348,7 @@ const AllStudentsPrint = ({ requests, filters }) => {
                             <th style={{ ...headBorder, width: '75px' }}>PIN No</th>
                             <th style={{ ...headBorder, width: '55px' }}>Quota</th>
                             <th style={{ ...headBorder, width: '50px' }}>Year</th>
+                            <th style={{ ...headBorder, width: '42px' }}>Merit</th>
                             {feeHeadEntries.map(([fhId, row]) => (
                                 <th key={fhId} style={{ ...headBorder, textTransform: 'none', fontSize: '8px', wordBreak: 'break-word', whiteSpace: 'normal' }}>
                                     {row.name}
@@ -381,6 +382,19 @@ const AllStudentsPrint = ({ requests, filters }) => {
                                         </>
                                     )}
                                     <td style={{ ...cellBorder, fontWeight: '700' }}>{yrSfx(yr)} Yr</td>
+                                    <td style={{ ...cellBorder, fontWeight: '700', fontSize: '8px' }}>
+                                        {(() => {
+                                            const merits = req.meritStatusRecords || req.merit_status || [];
+                                            const yrMerit = merits.find(m => Number(m.student_year) === yr);
+                                            const val = yrMerit?.merit_status ? String(yrMerit.merit_status).trim().toLowerCase() : '';
+                                            if (val === 'yes') {
+                                                return <span style={{ color: '#166534', backgroundColor: '#dcfce7', padding: '1px 3px', borderRadius: '2px', border: '1px solid #86efac', fontWeight: '800' }}>YES</span>;
+                                            } else if (val === 'no') {
+                                                return <span style={{ color: '#991b1b', backgroundColor: '#fee2e2', padding: '1px 3px', borderRadius: '2px', border: '1px solid #fca5a5', fontWeight: '800' }}>NO</span>;
+                                            }
+                                            return '—';
+                                        })()}
+                                    </td>
                                     {feeHeadEntries.map(([fhId]) => {
                                         const cell = studentAmounts[fhId]?.[yr];
                                         const stdAmt = studentStandards[fhId]?.[yr];

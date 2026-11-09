@@ -88,6 +88,42 @@ const getStudents = async (req, res) => {
 
     const [rows] = await db.query(query, params);
     console.log(`Successfully fetched ${rows.length} students.`);
+
+    // Fetch merit status records for students
+    if (rows.length > 0) {
+      try {
+        const studentIds = rows.map(r => r.id).filter(Boolean);
+        const admNos = rows.map(r => r.admission_number).filter(Boolean);
+        const queryIds = [...new Set([...studentIds, ...admNos])];
+        if (queryIds.length > 0) {
+          const [meritRows] = await db.query(
+            `SELECT id, student_id, student_year, merit_status, remarks, created_at, updated_at
+             FROM student_merit_status
+             WHERE student_id IN (?)
+             ORDER BY student_year ASC`,
+            [queryIds]
+          );
+          const meritMap = {};
+          meritRows.forEach(m => {
+            const sid = String(m.student_id);
+            if (!meritMap[sid]) meritMap[sid] = [];
+            meritMap[sid].push(m);
+          });
+          rows.forEach(r => {
+            const merits = meritMap[String(r.id)] || meritMap[String(r.admission_number)] || [];
+            r.meritStatusRecords = merits;
+            r.merit_status = merits;
+          });
+        }
+      } catch (meritErr) {
+        console.error('Error fetching merit status in getStudents:', meritErr.message);
+        rows.forEach(r => {
+          r.meritStatusRecords = [];
+          r.merit_status = [];
+        });
+      }
+    }
+
     res.json(rows);
   } catch (error) {
     console.error('Error fetching students:', error);
@@ -529,6 +565,28 @@ const createStudent = async (req, res) => {
       Number(current_year),
       Number(current_semester)
     ]);
+
+    // Insert merit status if provided
+    if (req.body.merit_status || req.body.meritStatusRecords) {
+      try {
+        const meritVal = String(req.body.merit_status || '').toLowerCase().trim();
+        const recordsToInsert = Array.isArray(req.body.meritStatusRecords) && req.body.meritStatusRecords.length > 0
+          ? req.body.meritStatusRecords
+          : (['yes', 'no'].includes(meritVal) ? [{ student_year: Number(current_year) || 1, merit_status: meritVal }] : []);
+
+        for (const mRec of recordsToInsert) {
+          const mStatus = String(mRec.merit_status || '').toLowerCase().trim();
+          if (['yes', 'no'].includes(mStatus)) {
+            await db.query(
+              `INSERT INTO student_merit_status (student_id, student_year, merit_status, remarks) VALUES (?, ?, ?, ?)`,
+              [result.insertId, Number(mRec.student_year) || 1, mStatus, mRec.remarks || null]
+            );
+          }
+        }
+      } catch (meritInsertErr) {
+        console.error('Error inserting merit status during student creation:', meritInsertErr.message);
+      }
+    }
 
     res.status(201).json({
       message: 'Student created successfully',

@@ -51,7 +51,7 @@ const getOverallConcessions = async (req, res) => {
         }
 
         // 1. Query students matching filters
-        let sqlQuery = `SELECT admission_number, pin_no, student_name, college, course, branch, batch, current_year, current_semester, stud_type, student_status FROM students WHERE 1=1`;
+        let sqlQuery = `SELECT id, admission_number, pin_no, student_name, college, course, branch, batch, current_year, current_semester, stud_type, student_status FROM students WHERE 1=1`;
         const params = [];
 
         if (collegeResult.collegeIds.length > 0) {
@@ -170,22 +170,59 @@ const getOverallConcessions = async (req, res) => {
             });
         });
 
-        // 4. Return students with revised fees and standard fees attached
-        const results = students.map(s => ({
-            admission_number: s.admission_number,
-            pin_no: s.pin_no || '-',
-            student_name: s.student_name,
-            college: s.college,
-            course: s.course,
-            branch: s.branch,
-            batch: s.batch,
-            current_year: s.current_year,
-            current_semester: s.current_semester,
-            stud_type: s.stud_type || 'Regular',
-            student_status: s.student_status,
-            revisedFees: concessionMap[s.admission_number] || [],
-            standardFees: standardFeesMap[s.admission_number] || []
-        }));
+        // 4. Fetch merit status records for these students
+        const meritMap = {};
+        const studentIdsForMerit = students.map(s => s.id).filter(Boolean);
+        const admissionNosForMerit = students.map(s => s.admission_number).filter(Boolean);
+        const allMeritQueryIds = [...new Set([...studentIdsForMerit, ...admissionNosForMerit])];
+
+        if (allMeritQueryIds.length > 0) {
+            try {
+                const [meritRows] = await db.query(
+                    `SELECT id, student_id, student_year, merit_status, remarks
+                     FROM student_merit_status
+                     WHERE student_id IN (?)
+                     ORDER BY student_year ASC`,
+                    [allMeritQueryIds]
+                );
+                meritRows.forEach(m => {
+                    const matchedStudent = students.find(
+                        s => String(s.id) === String(m.student_id) || String(s.admission_number).trim() === String(m.student_id).trim()
+                    );
+                    const admKey = matchedStudent ? String(matchedStudent.admission_number).trim() : String(m.student_id).trim();
+                    if (admKey) {
+                        if (!meritMap[admKey]) meritMap[admKey] = [];
+                        meritMap[admKey].push(m);
+                    }
+                });
+            } catch (mErr) {
+                console.error('Error fetching merit status in getOverallConcessions:', mErr.message);
+            }
+        }
+
+        // 5. Return students with revised fees, standard fees, and merit status attached
+        const results = students.map(s => {
+            const admKey = String(s.admission_number || '').trim();
+            const merits = meritMap[admKey] || meritMap[String(s.id)] || [];
+            return {
+                id: s.id,
+                admission_number: s.admission_number,
+                pin_no: s.pin_no || '-',
+                student_name: s.student_name,
+                college: s.college,
+                course: s.course,
+                branch: s.branch,
+                batch: s.batch,
+                current_year: s.current_year,
+                current_semester: s.current_semester,
+                stud_type: s.stud_type || 'Regular',
+                student_status: s.student_status,
+                revisedFees: concessionMap[s.admission_number] || [],
+                standardFees: standardFeesMap[s.admission_number] || [],
+                meritStatusRecords: merits,
+                merit_status: merits
+            };
+        });
 
         res.json(results);
     } catch (error) {
