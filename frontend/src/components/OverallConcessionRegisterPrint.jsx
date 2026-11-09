@@ -259,9 +259,13 @@ const AllStudentsPrint = ({ requests, filters }) => {
         }
     });
 
-    const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
+    let feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
         String(a[1].name || '').localeCompare(String(b[1].name || ''))
     );
+    const selectedFeeHeads = Array.isArray(filters?.selectedFeeHeads) ? filters.selectedFeeHeads : [];
+    if (selectedFeeHeads.length > 0) {
+        feeHeadEntries = feeHeadEntries.filter(([fhId]) => selectedFeeHeads.includes(fhId));
+    }
 
     // Prefer courseYears from filters if provided; otherwise use concession years
     const courseYearsHint = Number(filters?.courseYears);

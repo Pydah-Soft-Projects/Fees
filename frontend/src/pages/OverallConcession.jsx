@@ -208,6 +208,7 @@ const OverallConcession = () => {
     const [isFormDirty,      setIsFormDirty]      = useState(false);
     const formDirtyRef = useRef(false);
     const bulkHeadDropRef = useRef(null);
+    const viewFeeHeadDropRef = useRef(null);
 
     // ── tabs ─────────────────────────────────────────────────────────────
     const [activeTab, setActiveTab] = useState(getFirstAllowedTab);
@@ -285,6 +286,9 @@ const OverallConcession = () => {
     // ── view overview list filter + print / download ─────────────────────
     const [viewListMode,      setViewListMode]      = useState('all'); // 'all' | 'revised'
     const [viewQuotaFilter,   setViewQuotaFilter]    = useState('');
+    const [viewSelectedFeeHeads, setViewSelectedFeeHeads] = useState([]);
+    const [viewFeeHeadDropOpen, setViewFeeHeadDropOpen] = useState(false);
+    const [viewFeeHeadSearch, setViewFeeHeadSearch] = useState('');
     const [viewPrintBusy,     setViewPrintBusy]     = useState(false);
     const [downloadModalOpen, setDownloadModalOpen] = useState(false);
     const [downloadScope,     setDownloadScope]     = useState('all');
@@ -426,6 +430,9 @@ const OverallConcession = () => {
         const handleOutsideClick = (e) => {
             if (bulkHeadDropRef.current && !bulkHeadDropRef.current.contains(e.target)) {
                 setBulkHeadDropOpen(false);
+            }
+            if (viewFeeHeadDropRef.current && !viewFeeHeadDropRef.current.contains(e.target)) {
+                setViewFeeHeadDropOpen(false);
             }
         };
         document.addEventListener('mousedown', handleOutsideClick);
@@ -576,13 +583,160 @@ const OverallConcession = () => {
         return list.filter((s) => String(s.stud_type || '').trim().toUpperCase() === q);
     }, [viewQuotaFilter]);
 
+    // Available fee heads for Overview tab
+    const overviewAvailableFeeHeads = useMemo(() => {
+        const set = new Set();
+        students.forEach(s => {
+            (s.revisedFees || []).forEach(rf => {
+                const hid = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                if (hid) set.add(hid);
+            });
+            if (includeNormalFees) {
+                (s.standardFees || []).forEach(sf => {
+                    const hid = normalizeFeeHeadId(sf.feeHeadId);
+                    if (hid) set.add(hid);
+                });
+            }
+        });
+        if (set.size === 0) {
+            feeHeads.forEach(fh => {
+                const hid = normalizeFeeHeadId(fh._id);
+                if (hid) set.add(hid);
+            });
+        }
+        return Array.from(set).map(id => {
+            const name = getFeeHeadName(id);
+            const fhObj = feeHeads.find(h => normalizeFeeHeadId(h._id) === id);
+            return {
+                id,
+                name,
+                code: fhObj?.code || ''
+            };
+        }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    }, [students, includeNormalFees, feeHeads, resolveRevisedFeeHeadId]);
+
+    const toggleViewFeeHead = (id) => {
+        setViewSelectedFeeHeads(prev =>
+            prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+        );
+    };
+
+    const selectAllViewFeeHeads = () => {
+        setViewSelectedFeeHeads(overviewAvailableFeeHeads.map(fh => fh.id));
+    };
+
+    const clearAllViewFeeHeads = () => {
+        setViewSelectedFeeHeads([]);
+    };
+
+    const renderFeeHeadDropdown = (position = 'left') => {
+        const filteredList = overviewAvailableFeeHeads.filter(fh => {
+            if (!viewFeeHeadSearch.trim()) return true;
+            const q = viewFeeHeadSearch.toLowerCase();
+            return (fh.name || '').toLowerCase().includes(q) || (fh.code || '').toLowerCase().includes(q);
+        });
+
+        return (
+            <div className={`absolute z-50 mt-1 w-72 bg-white border border-slate-300 rounded-xl shadow-2xl p-2.5 text-xs text-slate-800 ${position === 'right' ? 'right-0' : 'left-0'}`}>
+                <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <span className="font-bold text-slate-700 text-[11px] uppercase tracking-wider">
+                        Fee Heads ({viewSelectedFeeHeads.length ? `${viewSelectedFeeHeads.length}/${overviewAvailableFeeHeads.length}` : 'All'})
+                    </span>
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                        <button
+                            type="button"
+                            onClick={selectAllViewFeeHeads}
+                            className="text-blue-600 hover:text-blue-800 font-bold px-1.5 py-0.5 rounded hover:bg-blue-50 cursor-pointer transition"
+                        >
+                            Select All
+                        </button>
+                        <span className="text-slate-300">|</span>
+                        <button
+                            type="button"
+                            onClick={clearAllViewFeeHeads}
+                            className="text-slate-500 hover:text-slate-700 font-bold px-1.5 py-0.5 rounded hover:bg-slate-100 cursor-pointer transition"
+                        >
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                {overviewAvailableFeeHeads.length > 5 && (
+                    <div className="mb-2">
+                        <input
+                            type="text"
+                            value={viewFeeHeadSearch}
+                            onChange={(e) => setViewFeeHeadSearch(e.target.value)}
+                            placeholder="Search fee head..."
+                            className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                    </div>
+                )}
+
+                <div className="max-h-56 overflow-y-auto space-y-0.5 pr-1 divide-y divide-slate-50">
+                    {filteredList.length === 0 ? (
+                        <div className="py-4 text-center text-slate-400 italic text-[11px]">No fee heads found</div>
+                    ) : (
+                        filteredList.map(fh => {
+                            const isChecked = viewSelectedFeeHeads.includes(fh.id);
+                            return (
+                                <label
+                                    key={fh.id}
+                                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg cursor-pointer select-none transition ${
+                                        isChecked ? 'bg-blue-50/70 text-blue-900 font-semibold' : 'hover:bg-slate-50 text-slate-700'
+                                    }`}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleViewFeeHead(fh.id)}
+                                        className="w-3.5 h-3.5 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                                    />
+                                    <span className="truncate flex-1 text-xs">{fh.name}</span>
+                                    {fh.code && (
+                                        <span className="text-[10px] text-slate-400 font-mono font-medium shrink-0">
+                                            {fh.code}
+                                        </span>
+                                    )}
+                                </label>
+                            );
+                        })
+                    )}
+                </div>
+
+                {viewSelectedFeeHeads.length > 0 && (
+                    <div className="pt-2 mt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">{viewSelectedFeeHeads.length} selected</span>
+                        <button
+                            type="button"
+                            onClick={() => setViewFeeHeadDropOpen(false)}
+                            className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition cursor-pointer"
+                        >
+                            Done
+                        </button>
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const handleViewPrint = async (mode) => {
         const includeAll = mode === 'all';
         const quotaFiltered = getViewQuotaFilteredStudents(students);
 
         const selectedStudents = includeAll
             ? quotaFiltered
-            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0 || (includeNormalFees && (s.standardFees || []).length > 0));
+            : quotaFiltered.filter(s => {
+                const hasRev = (s.revisedFees || []).some(rf => {
+                    const hid = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(hid);
+                });
+                const hasStd = includeNormalFees && (s.standardFees || []).some(sf => {
+                    const hid = normalizeFeeHeadId(sf.feeHeadId);
+                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(hid);
+                });
+                return hasRev || hasStd;
+            });
 
         if (selectedStudents.length === 0) {
             alert(includeAll ? 'No students loaded to print.' : 'No revised-fee students to print.');
@@ -644,7 +798,8 @@ const OverallConcession = () => {
                         ...filters,
                         quota: viewQuotaFilter || undefined,
                         courseYears: courseYears[filters.course] || undefined,
-                        includeNormalFees: Boolean(includeNormalFees)
+                        includeNormalFees: Boolean(includeNormalFees),
+                        selectedFeeHeads: viewSelectedFeeHeads.length > 0 ? viewSelectedFeeHeads : undefined
                     },
                     generatedOn: new Date().toLocaleString('en-IN')
                 }
@@ -664,7 +819,17 @@ const OverallConcession = () => {
 
         const selectedStudents = includeAll
             ? quotaFiltered
-            : quotaFiltered.filter(s => (s.revisedFees || []).length > 0 || (includeNormalFees && (s.standardFees || []).length > 0));
+            : quotaFiltered.filter(s => {
+                const hasRev = (s.revisedFees || []).some(rf => {
+                    const hid = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(hid);
+                });
+                const hasStd = includeNormalFees && (s.standardFees || []).some(sf => {
+                    const hid = normalizeFeeHeadId(sf.feeHeadId);
+                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(hid);
+                });
+                return hasRev || hasStd;
+            });
 
         if (selectedStudents.length === 0) {
             alert(includeAll ? 'No students loaded to export.' : 'No revised-fee students to export.');
@@ -787,9 +952,12 @@ const OverallConcession = () => {
                 }
             });
 
-            const feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
+            let feeHeadEntries = [...feeHeadMap.entries()].sort((a, b) =>
                 String(a[1].name || '').localeCompare(String(b[1].name || ''))
             );
+            if (viewSelectedFeeHeads.length > 0) {
+                feeHeadEntries = feeHeadEntries.filter(([fhId]) => viewSelectedFeeHeads.includes(fhId));
+            }
 
             const courseYearsHint = Number(courseYears[filters.course]);
             let years = [...yearsSet].sort((a, b) => a - b);
@@ -847,6 +1015,9 @@ const OverallConcession = () => {
             if (filters.branch)  filterParts.push(filters.branch);
             if (filters.batch)   filterParts.push(`Batch ${filters.batch}`);
             if (viewQuotaFilter) filterParts.push(`Quota: ${viewQuotaFilter}`);
+            if (viewSelectedFeeHeads.length > 0) {
+                filterParts.push(`Fee Heads: ${viewSelectedFeeHeads.map(getFeeHeadName).join(', ')}`);
+            }
             const filterLabel = filterParts.length ? filterParts.join(' · ') : 'All Colleges / Courses / Branches';
 
             const totalCols = Math.max(8, 7 + feeHeadEntries.length + 1);
@@ -1990,7 +2161,33 @@ const OverallConcession = () => {
                                                 : quotaOptions
                                             ).map(q => <option key={q} value={q}>{q}</option>)}
                                         </select>
-                                </div>
+                                    </div>
+                                )}
+                                {activeTab === 'view' && (
+                                    <div className="min-w-[140px] flex-1 relative" ref={viewFeeHeadDropRef}>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                                            Fee Head {viewSelectedFeeHeads.length > 0 ? `(${viewSelectedFeeHeads.length})` : ''}
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setViewFeeHeadDropOpen(prev => !prev)}
+                                            className={`w-full bg-slate-50 border text-xs rounded-lg p-2.5 text-left flex justify-between items-center cursor-pointer transition shadow-xs ${
+                                                viewSelectedFeeHeads.length > 0
+                                                    ? 'border-blue-400 text-blue-700 font-bold bg-blue-50/30'
+                                                    : 'border-slate-300 text-slate-800'
+                                            }`}
+                                        >
+                                            <span className="truncate">
+                                                {viewSelectedFeeHeads.length === 0
+                                                    ? 'All Fee Heads'
+                                                    : viewSelectedFeeHeads.length === 1
+                                                    ? getFeeHeadName(viewSelectedFeeHeads[0])
+                                                    : `${viewSelectedFeeHeads.length} Selected`}
+                                            </span>
+                                            <ChevronDown size={14} className={`transition transform ml-1 text-slate-500 shrink-0 ${viewFeeHeadDropOpen ? 'rotate-180' : ''}`} />
+                                        </button>
+                                        {viewFeeHeadDropOpen && renderFeeHeadDropdown('left')}
+                                    </div>
                                 )}
                                 <div className="relative min-w-[180px] flex-1 lg:max-w-[220px]">
                                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Search</label>
@@ -2253,10 +2450,20 @@ const OverallConcession = () => {
                         VIEW OVERVIEW TAB
                     ══════════════════════════════════════════════════ */}
                     {activeTab === 'view' && canView && (() => {
+                        const hasConcessionInSelectedHeads = (s) => {
+                            if (viewSelectedFeeHeads.length === 0) {
+                                return (s.revisedFees || []).length > 0;
+                            }
+                            return (s.revisedFees || []).some(rf => {
+                                const fhId = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                                return viewSelectedFeeHeads.includes(fhId);
+                            });
+                        };
+
                         const quotaFilteredStudents = getViewQuotaFilteredStudents(students);
-                        const revisedCount = quotaFilteredStudents.filter(s => (s.revisedFees || []).length > 0).length;
+                        const revisedCount = quotaFilteredStudents.filter(hasConcessionInSelectedHeads).length;
                         const viewStudents = viewListMode === 'revised'
-                            ? quotaFilteredStudents.filter(s => (s.revisedFees || []).length > 0)
+                            ? quotaFilteredStudents.filter(hasConcessionInSelectedHeads)
                             : quotaFilteredStudents;
 
                         const sortedViewStudents = [...viewStudents].sort((a, b) => {
@@ -2309,6 +2516,10 @@ const OverallConcession = () => {
                             const nameB = getFeeHeadName(b);
                             return nameA.localeCompare(nameB);
                         });
+
+                        const displayedFeeHeads = viewSelectedFeeHeads.length > 0
+                            ? unionFeeHeads.filter(fhId => viewSelectedFeeHeads.includes(fhId))
+                            : unionFeeHeads;
 
                         return (
                         <>
@@ -2376,6 +2587,35 @@ const OverallConcession = () => {
                                     </button>
                                 </div>
                             </div>
+
+                            {viewSelectedFeeHeads.length > 0 && (
+                                <div className="bg-blue-50/60 border-b border-blue-100 px-4 py-2 flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">Filtered Fee Heads:</span>
+                                    {viewSelectedFeeHeads.map(fhId => (
+                                        <span
+                                            key={fhId}
+                                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-blue-700 border border-blue-200 shadow-2xs"
+                                        >
+                                            {getFeeHeadName(fhId)}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleViewFeeHead(fhId)}
+                                                className="hover:text-rose-600 transition cursor-pointer ml-0.5"
+                                                title="Remove fee head"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={clearAllViewFeeHeads}
+                                        className="text-[11px] text-blue-600 hover:text-rose-600 font-bold ml-1 cursor-pointer transition underline"
+                                    >
+                                        Clear all
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="overflow-x-auto w-full">
                                 <table className="w-full text-xs text-left border-collapse min-w-[800px]">
@@ -2478,8 +2718,15 @@ const OverallConcession = () => {
                                                 const displayYears = courseDur > 0
                                                     ? Array.from({ length: courseDur }, (_, i) => i + 1)
                                                     : years;
-                                                const hasConcessions = (s.revisedFees || []).length > 0;
-                                                const hasDisplayData = hasConcessions || (includeNormalFees && (s.standardFees || []).length > 0);
+                                                const hasConcessions = (s.revisedFees || []).some(rf => {
+                                                    const fhId = resolveRevisedFeeHeadId(rf) || normalizeFeeHeadId(rf.feeHeadId);
+                                                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(fhId);
+                                                });
+                                                const hasStandard = includeNormalFees && (s.standardFees || []).some(sf => {
+                                                    const fhId = normalizeFeeHeadId(sf.feeHeadId);
+                                                    return viewSelectedFeeHeads.length === 0 || viewSelectedFeeHeads.includes(fhId);
+                                                });
+                                                const hasDisplayData = hasConcessions || hasStandard;
 
                                                 return (
                                                     <tr key={s.admission_number} className="hover:bg-slate-50/30 align-top">
@@ -2495,7 +2742,7 @@ const OverallConcession = () => {
                                                                             <tr className="bg-slate-50 text-slate-500 text-[10px] uppercase">
                                                                                 <th className="px-3 py-2 text-left font-bold border border-slate-200 w-[120px] min-w-[120px]">Academic Year</th>
                                                                                 <th className="px-3 py-2 text-center font-bold border border-slate-200 w-[80px] min-w-[80px]">Merit</th>
-                                                                                {unionFeeHeads.map(fhId => (
+                                                                                {displayedFeeHeads.map(fhId => (
                                                                                     <th key={fhId} className="px-3 py-2 text-center font-bold border border-slate-200 whitespace-nowrap w-[150px] min-w-[150px] truncate" title={getFeeHeadName(fhId)}>
                                                                                         {getFeeHeadName(fhId)}
                                                                                     </th>
@@ -2506,7 +2753,7 @@ const OverallConcession = () => {
                                                                         <tbody>
                                                                             {displayYears.map(yr => {
                                                                                 // Get remarks for this year from concessions by looking at union fee heads
-                                                                                const yrRemarks = unionFeeHeads
+                                                                                const yrRemarks = displayedFeeHeads
                                                                                     .map(fhId => byHead[fhId]?.years?.[yr]?.remarks)
                                                                                     .filter(Boolean);
                                                                                 const displayRemark = s.remarks || (yrRemarks.length > 0 ? yrRemarks[0] : '—');
@@ -2537,7 +2784,7 @@ const OverallConcession = () => {
                                                                                                 return <span className="text-slate-300 font-normal">—</span>;
                                                                                             })()}
                                                                                         </td>
-                                                                                        {unionFeeHeads.map(fhId => {
+                                                                                        {displayedFeeHeads.map(fhId => {
                                                                                             const cell = byHead[fhId]?.years?.[yr];
                                                                                             const stdAmt = standardByHead[fhId]?.[yr];
 
