@@ -857,12 +857,16 @@ const ConcessionManagement = () => {
                         isBulk: false,
                         voucherId: req.voucherId,
                         createdAt: req.createdAt,
+                        updatedAt: req.updatedAt,
+                        status: req.status || 'PENDING',
                         college: req.college,
                         course: req.course,
                         branch: req.branch,
                         batch: req.batch,
                         requestedBy: req.requestedBy || 'N/A',
                         concessionGivenBy: req.concessionGivenBy || '',
+                        approvedBy: req.approvedBy || '',
+                        approvedAt: req.approvedAt || null,
                         feeHead: req.feeHead,
                         feeHeads: [], // Track unique fee heads
                         reason: req.reason,
@@ -875,6 +879,15 @@ const ConcessionManagement = () => {
                 voucherMap[groupKey].totalAmount += req.amount;
                 if (!voucherMap[groupKey].concessionGivenBy && req.concessionGivenBy) {
                     voucherMap[groupKey].concessionGivenBy = req.concessionGivenBy;
+                }
+                if (!voucherMap[groupKey].approvedBy && req.approvedBy) {
+                    voucherMap[groupKey].approvedBy = req.approvedBy;
+                }
+                if (!voucherMap[groupKey].approvedAt && req.approvedAt) {
+                    voucherMap[groupKey].approvedAt = req.approvedAt;
+                }
+                if (req.status && voucherMap[groupKey].status === 'PENDING') {
+                    voucherMap[groupKey].status = req.status;
                 }
                 
                 // Track unique fee heads in the group
@@ -1926,12 +1939,13 @@ const ConcessionManagement = () => {
                                             <th className="py-2.5 px-3 text-right whitespace-nowrap">Amount</th>
                                             <th className="py-2.5 px-3 whitespace-nowrap">Raised By</th>
                                             <th className="py-2.5 px-3 whitespace-nowrap">Given By</th>
+                                            <th className="py-2.5 px-3 whitespace-nowrap">Approved By</th>
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100 text-xs">
                                         {pendingRequests.length === 0 ? (
                                             <tr>
-                                                <td colSpan="8" className="py-40 text-center">
+                                                <td colSpan="9" className="py-40 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
                                                         <div className="bg-gray-100 p-6 rounded-full border-2 border-dashed border-gray-300 mb-4">
                                                             <Search size={40} className="text-gray-400" />
@@ -2001,14 +2015,59 @@ const ConcessionManagement = () => {
                                                         </div>
                                                     </td>
                                                     <td className="py-2.5 px-3 whitespace-nowrap">
-                                                        <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 inline-block">
-                                                            {group.requests[0]?.requestedBy || group.requestedBy || 'N/A'}
-                                                        </span>
+                                                        <div className="flex flex-col">
+                                                            <span className="text-[11px] font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 inline-block w-fit">
+                                                                {group.requests[0]?.requestedBy || group.requestedBy || 'N/A'}
+                                                            </span>
+                                                            {(group.createdAt || group.requests[0]?.createdAt) && (
+                                                                <span className="text-[9.5px] text-gray-400 font-medium mt-0.5">
+                                                                    {new Date(group.createdAt || group.requests[0]?.createdAt).toLocaleString('en-IN', {
+                                                                        day: '2-digit', month: 'short', year: 'numeric',
+                                                                        hour: '2-digit', minute: '2-digit', hour12: true
+                                                                    })}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     <td className="py-2.5 px-3 whitespace-nowrap">
                                                         <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">
                                                             {group.requests[0]?.concessionGivenBy || group.concessionGivenBy || '—'}
                                                         </span>
+                                                    </td>
+                                                    <td className="py-2.5 px-3 whitespace-nowrap">
+                                                        {(() => {
+                                                            const req0 = group.requests[0] || {};
+                                                            const isApproved = req0.status === 'APPROVED' || group.status === 'APPROVED';
+                                                            const isRejected = req0.status === 'REJECTED' || group.status === 'REJECTED';
+                                                            const approverName = req0.approvedBy || group.approvedBy;
+                                                            const approvalTime = req0.approvedAt || group.approvedAt || ((isApproved || isRejected) ? (req0.updatedAt || group.updatedAt) : null);
+
+                                                            if (!approverName && !isApproved && !isRejected) {
+                                                                return <span className="text-gray-400 italic font-medium text-xs">—</span>;
+                                                            }
+
+                                                            return (
+                                                                <div className="flex flex-col">
+                                                                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded border inline-block w-fit ${
+                                                                        isRejected
+                                                                            ? 'text-red-700 bg-red-50 border-red-200'
+                                                                            : isApproved
+                                                                            ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                                                                            : 'text-gray-700 bg-gray-100 border-gray-200'
+                                                                    }`}>
+                                                                        {approverName || (isRejected ? 'Rejected' : isApproved ? 'Approved' : '—')}
+                                                                    </span>
+                                                                    {approvalTime && (
+                                                                        <span className="text-[9.5px] text-gray-400 font-medium mt-0.5">
+                                                                            {new Date(approvalTime).toLocaleString('en-IN', {
+                                                                                day: '2-digit', month: 'short', year: 'numeric',
+                                                                                hour: '2-digit', minute: '2-digit', hour12: true
+                                                                            })}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </td>
                                                     <td className="hidden">
                                                             <button
@@ -2670,6 +2729,14 @@ const ConcessionManagement = () => {
                                                     <div className="bg-white p-2 rounded-xl border border-gray-200/80">
                                                         <span className="text-gray-400 font-bold block text-[9px] uppercase">Raised By</span>
                                                         <span className="font-bold text-gray-800 truncate block">{selectedRequest.requests[0]?.requestedBy || selectedRequest.requestedBy || 'N/A'}</span>
+                                                        {(selectedRequest.createdAt || selectedRequest.requests[0]?.createdAt) && (
+                                                            <span className="text-[9px] text-gray-400 block mt-0.5">
+                                                                {new Date(selectedRequest.createdAt || selectedRequest.requests[0]?.createdAt).toLocaleString('en-IN', {
+                                                                    day: '2-digit', month: 'short', year: 'numeric',
+                                                                    hour: '2-digit', minute: '2-digit', hour12: true
+                                                                })}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="bg-white p-2 rounded-xl border border-gray-200/80">
                                                         <span className="text-gray-400 font-bold block text-[9px] uppercase">Given By</span>
@@ -2678,8 +2745,16 @@ const ConcessionManagement = () => {
                                                     <div className="bg-white p-2 rounded-xl border border-emerald-200/80 bg-emerald-50/20">
                                                         <span className="text-emerald-700 font-bold block text-[9px] uppercase">Approved By</span>
                                                         <span className="font-bold text-emerald-800 truncate block">
-                                                            {selectedRequest.requests[0]?.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                            {selectedRequest.requests[0]?.approvedBy || selectedRequest.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
                                                         </span>
+                                                        {(selectedRequest.requests[0]?.approvedAt || selectedRequest.approvedAt || ((selectedRequest.requests[0]?.status === 'APPROVED' || selectedRequest.status === 'APPROVED') && (selectedRequest.requests[0]?.updatedAt || selectedRequest.updatedAt))) && (
+                                                            <span className="text-[9px] text-emerald-600 block mt-0.5">
+                                                                {new Date(selectedRequest.requests[0]?.approvedAt || selectedRequest.approvedAt || selectedRequest.requests[0]?.updatedAt || selectedRequest.updatedAt).toLocaleString('en-IN', {
+                                                                    day: '2-digit', month: 'short', year: 'numeric',
+                                                                    hour: '2-digit', minute: '2-digit', hour12: true
+                                                                })}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div className="bg-white p-2 rounded-xl border border-blue-200 col-span-2 sm:col-span-3 flex items-center justify-between px-3">
                                                         <span className="text-gray-500 font-extrabold text-[9px] uppercase">Requested Amount</span>
@@ -2701,6 +2776,14 @@ const ConcessionManagement = () => {
                                                             <span className="font-bold text-gray-700 text-xs block">
                                                                 {selectedRequest.requests[0]?.requestedBy || selectedRequest.requestedBy || 'N/A'}
                                                             </span>
+                                                            {(selectedRequest.createdAt || selectedRequest.requests[0]?.createdAt) && (
+                                                                <span className="text-[9px] text-gray-400 block mt-0.5">
+                                                                    {new Date(selectedRequest.createdAt || selectedRequest.requests[0]?.createdAt).toLocaleString('en-IN', {
+                                                                        day: '2-digit', month: 'short', year: 'numeric',
+                                                                        hour: '2-digit', minute: '2-digit', hour12: true
+                                                                    })}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="text-right border-l pl-2">
                                                             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Given By</span>
@@ -2711,8 +2794,16 @@ const ConcessionManagement = () => {
                                                         <div className="text-right border-l pl-2">
                                                             <span className="text-[9px] text-emerald-700 font-bold uppercase tracking-widest block">Approved By</span>
                                                             <span className="font-bold text-emerald-700 text-xs block">
-                                                                {selectedRequest.requests[0]?.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
+                                                                {selectedRequest.requests[0]?.approvedBy || selectedRequest.approvedBy || (selectedRequest.requests[0]?.status === 'APPROVED' ? 'Approved' : 'Pending')}
                                                             </span>
+                                                            {(selectedRequest.requests[0]?.approvedAt || selectedRequest.approvedAt || ((selectedRequest.requests[0]?.status === 'APPROVED' || selectedRequest.status === 'APPROVED') && (selectedRequest.requests[0]?.updatedAt || selectedRequest.updatedAt))) && (
+                                                                <span className="text-[9px] text-emerald-600 block mt-0.5">
+                                                                    {new Date(selectedRequest.requests[0]?.approvedAt || selectedRequest.approvedAt || selectedRequest.requests[0]?.updatedAt || selectedRequest.updatedAt).toLocaleString('en-IN', {
+                                                                        day: '2-digit', month: 'short', year: 'numeric',
+                                                                        hour: '2-digit', minute: '2-digit', hour12: true
+                                                                    })}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                         <div className="text-right border-l pl-2">
                                                             <span className="text-[9px] text-gray-400 font-bold uppercase tracking-widest block">Fee Component</span>
