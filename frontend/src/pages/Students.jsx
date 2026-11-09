@@ -190,18 +190,32 @@ const Students = () => {
 
     const batchOptions = useMemo(() => {
         const currentYear = new Date().getFullYear();
-        const years = [];
-        for (let y = currentYear; y >= 2015; y--) {
-            years.push(String(y));
+        const metaYears = (metadata?.batches || [])
+            .map(b => parseInt(b, 10))
+            .filter(n => !isNaN(n));
+        const startYear = Math.max(currentYear + 1, ...metaYears);
+
+        const yearsSet = new Set();
+        // Generate batch years from the upcoming/latest year down to 2000
+        for (let y = startYear; y >= 2000; y--) {
+            yearsSet.add(String(y));
         }
+
+        // Also include any available batches from metadata/SDMS
         if (metadata?.batches) {
             metadata.batches.forEach(b => {
-                if (b && !years.includes(String(b)) && Number(b) <= currentYear) {
-                    years.push(String(b));
-                }
+                if (b) yearsSet.add(String(b));
             });
         }
-        return years.sort((a, b) => Number(b) - Number(a));
+
+        return Array.from(yearsSet).sort((a, b) => {
+            const numA = Number(a);
+            const numB = Number(b);
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return numB - numA;
+            }
+            return String(b).localeCompare(String(a));
+        });
     }, [metadata]);
 
     return (
