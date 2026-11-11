@@ -65,7 +65,7 @@ const VerifyReceipt = () => {
         <div className="min-h-screen py-8 px-4 sm:px-6 lg:px-8 flex flex-col items-center justify-start" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             {/* Header / Campo Logo area */}
             <div className="w-full max-w-2xl text-center mb-6">
-                <img src="/PYDAH_LOGO_PHOTO.jpg" alt="Campo Group Logo" className="h-16 mx-auto mb-2 object-contain" />
+                <img src="/campo-logos/icon-192.png" alt="Campo Group Logo" className="h-16 w-16 mx-auto mb-2 object-contain rounded-xl" />
                 <h2 className="text-xs uppercase tracking-widest text-gray-500 font-bold">Campo Group of Institutions</h2>
             </div>
 

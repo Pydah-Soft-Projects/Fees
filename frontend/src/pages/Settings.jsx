@@ -572,7 +572,7 @@ const Settings = () => {
                                                 setEmailList(list);
                                             }}
                                             className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
-                                            placeholder="e.g. director@pydah.edu"
+                                            placeholder="e.g. director@campo.edu"
                                             required
                                         />
                                         

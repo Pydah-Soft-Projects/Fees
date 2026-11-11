@@ -269,33 +269,22 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                     title={isCollapsed ? "Click to Expand" : ""}
                 >
                     {isCollapsed ? (
-                        /* Compact Emblem for Collapsed Sidebar */
-                        <div className="border-[2px] border-white w-9 h-9 rounded-tl-lg rounded-br-lg rounded-tr-[2px] rounded-bl-[2px] flex items-center justify-center relative shrink-0">
-                            <div className="absolute -top-1 -left-0.5 flex gap-[1px]">
-                                <span className="w-1 h-1 rounded-full bg-white"></span>
-                                <span className="w-[3px] h-[3px] rounded-full bg-white mt-[1px]"></span>
-                            </div>
-                            <span className="text-base font-black text-white tracking-tighter">C</span>
-                        </div>
+                        /* Compact Campo Icon for Collapsed Sidebar */
+                        <img
+                            src="/campo-logos/favicon.svg"
+                            alt="Campo"
+                            className="w-9 h-9 rounded-lg object-contain shrink-0 shadow-xs"
+                        />
                     ) : (
-                        /* Full Brand Logo Styled in CSS */
+                        /* Full Campo Brand Logo */
                         <div className="flex flex-col items-center justify-center select-none">
-                            {/* Emblem Box */}
-                            <div className="border-[2.5px] border-white px-5 py-2 rounded-tl-[18px] rounded-br-[18px] rounded-tr-[3px] rounded-bl-[3px] relative flex items-center justify-center leading-none">
-                                {/* The CAMPO text with stylized dots */}
-                                <div className="relative flex items-center">
-                                    <div className="absolute -top-1.5 -left-1.5 flex gap-[1.5px]">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-white opacity-95"></span>
-                                        <span className="w-1 h-1 rounded-full bg-white opacity-85 mt-1"></span>
-                                        <span className="w-[3px] h-[3px] rounded-full bg-white opacity-75 mt-0.5"></span>
-                                    </div>
-                                    <span className="text-xl font-extrabold text-white tracking-widest font-sans">
-                                        CAMPO
-                                    </span>
-                                </div>
-                            </div>
+                            <img
+                                src="/campo-logos/campo_logo_transparent_hq.png"
+                                alt="Campo"
+                                className="h-9 w-auto max-w-[155px] object-contain"
+                            />
                             {/* Subtitle */}
-                            <span className="text-[10px] mt-2 font-medium tracking-wider whitespace-nowrap" style={{ color: sidebarMuted }}>
+                            <span className="text-[10px] mt-1.5 font-medium tracking-wider whitespace-nowrap" style={{ color: sidebarMuted }}>
                                 Fee Management
                             </span>
                         </div>

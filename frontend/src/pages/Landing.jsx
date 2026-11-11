@@ -69,13 +69,12 @@ const Landing = () => {
 
             {/* Navbar */}
             <nav className="relative z-10 flex justify-between items-center py-5 px-8 md:px-16 backdrop-blur-sm bg-white/70 sticky top-0 border-b border-gray-100">
-                {/* Brand Logo Code Emblem */}
-                <div className="flex items-center gap-3.5 select-none">
-                    <div className="border-[2px] border-blue-700 px-3.5 py-1.5 rounded-tl-[12px] rounded-br-[12px] rounded-tr-[2px] rounded-bl-[2px] relative flex items-center justify-center leading-none bg-blue-50/50">
-                        <span className="text-base font-extrabold text-blue-700 tracking-wider font-sans">
-                            CAMPO
-                        </span>
-                    </div>
+                {/* Brand Logo */}
+                <div className="flex items-center gap-2.5 select-none">
+                    <img src="/campo-logos/favicon.svg" alt="Campo Logo" className="w-9 h-9 object-contain rounded-lg shadow-xs" />
+                    <span className="text-xl font-extrabold text-slate-900 tracking-tight font-sans">
+                        Campo<span className="text-blue-600">Fees</span>
+                    </span>
                 </div>
 
 

@@ -1241,7 +1241,7 @@ const UserManagement = () => {
                                             value={formData.email || ''}
                                             onChange={handleChange}
                                             className="w-full border p-2 rounded mt-1"
-                                            placeholder="e.g. admin@pydahsoft.in"
+                                            placeholder="e.g. admin@campo.edu"
                                         />
                                     </div>
 

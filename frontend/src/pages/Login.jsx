@@ -182,21 +182,13 @@ const Login = () => {
                     <div className="absolute bottom-[10%] right-[10%] w-16 h-16 rounded-full bg-blue-500 shadow-2xl overflow-hidden z-10"></div>
 
                     <div className="relative z-20 mt-4 flex flex-col items-center">
-                        {/* Custom Code Emblem Brand Logo */}
+                        {/* Campo Brand Logo */}
                         <div className="flex flex-col items-center select-none mb-10">
-                            <div className="border-[3.5px] border-white px-10 py-4 rounded-tl-[28px] rounded-br-[28px] rounded-tr-[5px] rounded-bl-[5px] relative flex items-center justify-center leading-none shadow-xl bg-white/5 backdrop-blur-sm transition-transform hover:scale-105 duration-300">
-                                <div className="relative flex items-center">
-                                    {/* Small dots above P */}
-                                    <div className="absolute -top-2.5 -left-3 flex gap-[2.5px]">
-                                        <span className="w-3.5 h-3.5 rounded-full bg-white opacity-95 shadow-sm"></span>
-                                        <span className="w-2 h-2 rounded-full bg-white opacity-85 mt-2"></span>
-                                        <span className="w-[5px] h-[5px] rounded-full bg-white opacity-75 mt-1.5"></span>
-                                    </div>
-                                    <span className="text-4xl font-black text-white tracking-widest font-sans">
-                                        CAMPO
-                                    </span>
-                                </div>
-                            </div>
+                            <img
+                                src="/campo-logos/campo_logo_transparent_hq.png"
+                                alt="Campo"
+                                className="h-14 w-auto object-contain transition-transform hover:scale-105 duration-300 drop-shadow-md"
+                            />
                             <span className="text-[12.5px] text-sky-200 mt-4.5 font-serif italic tracking-widest uppercase">
                                 Education & Beyond
                             </span>
@@ -389,7 +381,7 @@ const Login = () => {
                                             type="email"
                                             value={emailInput}
                                             onChange={(e) => setEmailInput(e.target.value)}
-                                            placeholder="admin@pydahsoft.in"
+                                            placeholder="admin@campo.edu"
                                             className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200/80 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-400 focus:bg-white transition-all text-slate-700 font-medium placeholder-slate-400 text-sm"
                                             required
                                         />
