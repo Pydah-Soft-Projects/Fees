@@ -30,11 +30,11 @@ import TransactionDateModification from './pages/TransactionDateModification';
 import useSessionGuard from './lib/useSessionGuard';
 import SessionDisplacedModal from './components/SessionDisplacedModal';
 import PortalSwitcher from './components/PortalSwitcher';
-import { isAuthenticated, getStoredUser } from './lib/auth';
+import { isAuthenticated, getStoredUser, APP_ROUTES } from './lib/auth';
 
 const PageLoader = () => (
   <div className="flex h-screen items-center justify-center bg-gray-50">
-    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
+    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--primary)]" />
   </div>
 );
 
@@ -47,23 +47,30 @@ const ProtectedRoute = ({ children }) => {
   
   const user = getStoredUser();
   const role = user?.role;
-  const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
+  const rawPermissions = Array.isArray(user?.permissions) ? user.permissions : [];
   
   // Super admin and Admin bypass permission checks
   if (role === 'superadmin' || role === 'admin') {
     return children;
   }
   
-  // User Profile is always allowed
-  if (location.pathname === '/user-profile') {
+  // User Profile and Dashboard overview are always accessible to authenticated staff
+  if (location.pathname === '/user-profile' || location.pathname === '/dashboard') {
     return children;
   }
+
+  // Normalize permissions (stripping capabilities like ':full' and ensuring leading '/')
+  const permissions = rawPermissions.map(p => {
+    if (typeof p !== 'string') return '';
+    const base = p.split(':')[0].trim();
+    return base.startsWith('/') ? base : `/${base}`;
+  });
   
   // Transaction Dates modification page is allowed only if user has explicit permission
   if (location.pathname === '/transaction-dates') {
     if (
       permissions.includes('/transaction-dates') ||
-      permissions.includes('transaction_date_change')
+      rawPermissions.includes('transaction_date_change')
     ) {
       return children;
     }
@@ -74,20 +81,21 @@ const ProtectedRoute = ({ children }) => {
     const canAccessProceedings =
       permissions.includes('/proceedings')
       || permissions.includes('/proceedings-analytics')
-      || permissions.includes('proceedings_view')
-      || permissions.includes('proceedings_edit')
-      || permissions.includes('proceedings_verify')
-      || permissions.includes('proceedings_approve');
+      || rawPermissions.includes('proceedings_view')
+      || rawPermissions.includes('proceedings_edit')
+      || rawPermissions.includes('proceedings_verify')
+      || rawPermissions.includes('proceedings_approve');
     if (canAccessProceedings) {
       return children;
     }
   }
 
   // Check if user has permission for the current path
-  const hasPermission = permissions.includes(location.pathname);
+  const hasPermission = permissions.includes(location.pathname) || rawPermissions.includes(location.pathname);
   if (!hasPermission) {
-    // Redirect to the first permitted route, or user profile, or dashboard
-    const defaultRoute = permissions.length > 0 ? permissions[0] : '/user-profile';
+    // Safely redirect to first valid route starting with '/', or default to /dashboard
+    const validPermRoute = permissions.find(p => p.startsWith('/') && APP_ROUTES.includes(p) && p !== location.pathname);
+    const defaultRoute = validPermRoute || '/dashboard';
     return <Navigate to={defaultRoute} replace />;
   }
   
@@ -159,6 +167,8 @@ function App() {
           <Route path="/proceedings" element={<ProtectedRoute><Proceedings /></ProtectedRoute>} />
           <Route path="/proceedings-analytics" element={<ProtectedRoute><ProceedingsAnalytics /></ProtectedRoute>} />
           <Route path="/transaction-dates" element={<ProtectedRoute><TransactionDateModification /></ProtectedRoute>} />
+          {/* Catch-all: Redirect unknown or malformed paths (e.g. /dashboard/dashboard:full) to /dashboard */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Suspense>
     </Router>

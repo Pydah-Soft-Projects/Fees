@@ -38,13 +38,13 @@ import {
 import { useCampuses } from '../hooks/useCampuses';
 
 const COLORS = [
-    '#6366f1', // Indigo
-    '#10b981', // Emerald
-    '#f59e0b', // Amber
-    '#06b6d4', // Cyan
-    '#ec4899', // Pink
-    '#8b5cf6', // Violet
-    '#3b82f6', // Blue
+    'var(--primary, #6366f1)',
+    'var(--secondary, #10b981)',
+    'var(--accent, #f59e0b)',
+    'var(--primary-hover, #06b6d4)',
+    'var(--primary-light, #ec4899)',
+    'var(--primary-800, #8b5cf6)',
+    'var(--primary-600, #3b82f6)',
     '#ef4444'  // Red
 ];
 
@@ -328,7 +328,7 @@ const Dashboard = () => {
     };
 
     return (
-        <div className="flex h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+        <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar isOpenMobile={isOpenMobile} onCloseMobile={() => setIsOpenMobile(false)} />
 
             <div className="flex-1 flex flex-col h-full overflow-hidden min-w-0">
@@ -605,7 +605,7 @@ const Dashboard = () => {
                                                         <Tooltip content={<CustomTooltip />} />
                                                         <Bar 
                                                             dataKey="Amount" 
-                                                            fill="#4f46e5" 
+                                                            fill="var(--primary, #4f46e5)" 
                                                             radius={[6, 6, 0, 0]}
                                                             maxBarSize={45}
                                                         >

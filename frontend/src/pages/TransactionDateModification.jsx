@@ -225,12 +225,12 @@ const TransactionDateModification = () => {
 
     if (!canAccess) {
         return (
-            <div className="flex h-screen bg-gray-100">
+            <div className="flex h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <Sidebar />
                 <div className="flex-1 p-8 flex items-center justify-center">
-                    <div className="bg-white p-6 rounded-md shadow border border-red-300 text-center max-w-md">
+                    <div className="p-6 rounded-md shadow border border-red-300 text-center max-w-md" style={{ backgroundColor: 'var(--surface)' }}>
                         <h2 className="text-lg font-bold text-red-700 mb-2">Access Denied</h2>
-                        <p className="text-gray-600 text-sm">
+                        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
                             You do not have permission to access the Transaction Date Modification page.
                         </p>
                     </div>
@@ -240,14 +240,14 @@ const TransactionDateModification = () => {
     }
 
     return (
-        <div className="flex min-h-screen bg-gray-100 text-gray-800 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 p-6 max-w-7xl mx-auto overflow-y-auto">
                 {/* Page Header */}
-                <div className="bg-white p-4 rounded-md shadow-sm border border-gray-200 mb-5 flex items-center justify-between">
+                <div className="p-4 rounded-md shadow-sm border mb-5 flex items-center justify-between" style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}>
                     <div>
-                        <h1 className="text-xl font-bold text-gray-800">Transaction Date Changes</h1>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>Transaction Date Changes</h1>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>
                             Select a date to view transactions, filter by user/cashier, and change transaction dates.
                         </p>
                     </div>

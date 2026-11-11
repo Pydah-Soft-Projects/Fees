@@ -219,13 +219,13 @@ const Students = () => {
     }, [metadata]);
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 p-8 overflow-hidden flex flex-col">
                  <header className="mb-4 flex justify-between items-center">
                      <div>
-                         <h1 className="text-2xl font-bold text-gray-800">Student Directory</h1>
-                         <p className="text-sm text-gray-500 mt-1">View and search student records.</p>
+                         <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>Student Directory</h1>
+                         <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>View and search student records.</p>
                      </div>
                      <button
                          onClick={() => {
@@ -234,7 +234,8 @@ const Students = () => {
                              setCustomBranch('');
                              setShowAddModal(true);
                          }}
-                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 shadow-sm transition active:scale-95"
+                         className="text-white font-bold px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 shadow-sm transition active:scale-95 hover:opacity-90"
+                         style={{ backgroundColor: 'var(--primary)' }}
                      >
                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
                          Add Student

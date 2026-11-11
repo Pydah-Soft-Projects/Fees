@@ -3,9 +3,18 @@ import { Link, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { getStoredUser, clearAuthSession } from '../lib/auth';
 import api from '../lib/api';
+import useThemeTokens from '../hooks/useThemeTokens';
 
 const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
     const location = useLocation();
+    const themeTokens = useThemeTokens();
+    const sidebarBg = themeTokens.sidebar || 'var(--sidebar, var(--primary))';
+    const sidebarText = themeTokens.sidebarText || 'var(--sidebar-text, #ffffff)';
+    const sidebarMuted = themeTokens.sidebarMuted || 'var(--sidebar-muted, rgba(255, 255, 255, 0.7))';
+    const primaryColor = themeTokens.primary || 'var(--primary)';
+    const primaryLight = themeTokens.primaryLight || 'var(--primary-light, rgba(255, 255, 255, 0.15))';
+    const borderColor = themeTokens.border || 'var(--border, rgba(255, 255, 255, 0.1))';
+
     const [isCollapsed, setIsCollapsed] = useState(() => {
         return localStorage.getItem('sidebar-collapsed') === 'true';
     });
@@ -245,12 +254,15 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                     onClick={onCloseMobile}
                 />
             )}
-            <div className={`bg-white h-screen max-h-screen flex flex-col shadow-lg transition-all duration-300 overflow-hidden shrink-0 
+            <div className={`h-screen max-h-screen flex flex-col shadow-lg transition-all duration-300 overflow-hidden shrink-0 
                 fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-auto
                 ${isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
                 ${isCollapsed ? 'w-64 md:w-20' : 'w-64 md:w-62'}
-            `}>
-            <div className="bg-gradient-to-br from-blue-700 via-indigo-800 to-indigo-950 p-4 pt-4 pb-7 shrink-0 relative flex flex-col items-center">
+            `} style={{ backgroundColor: sidebarBg, color: sidebarText, borderRight: `1px solid ${borderColor}` }}>
+            <div 
+                className="p-4 pt-4 pb-4 shrink-0 relative flex flex-col items-center border-b"
+                style={{ backgroundColor: sidebarBg, color: sidebarText, borderColor: 'rgba(255, 255, 255, 0.1)' }}
+            >
                 <div
                     className={`flex items-center gap-3 ${isCollapsed ? 'justify-center w-full cursor-pointer' : 'justify-center w-full'}`}
                     onClick={() => isCollapsed && expandSidebar()}
@@ -263,14 +275,14 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                 <span className="w-1 h-1 rounded-full bg-white"></span>
                                 <span className="w-[3px] h-[3px] rounded-full bg-white mt-[1px]"></span>
                             </div>
-                            <span className="text-base font-black text-white tracking-tighter">P</span>
+                            <span className="text-base font-black text-white tracking-tighter">C</span>
                         </div>
                     ) : (
                         /* Full Brand Logo Styled in CSS */
                         <div className="flex flex-col items-center justify-center select-none">
                             {/* Emblem Box */}
                             <div className="border-[2.5px] border-white px-5 py-2 rounded-tl-[18px] rounded-br-[18px] rounded-tr-[3px] rounded-bl-[3px] relative flex items-center justify-center leading-none">
-                                {/* The PYDAH text with stylized dots */}
+                                {/* The CAMPO text with stylized dots */}
                                 <div className="relative flex items-center">
                                     <div className="absolute -top-1.5 -left-1.5 flex gap-[1.5px]">
                                         <span className="w-1.5 h-1.5 rounded-full bg-white opacity-95"></span>
@@ -278,13 +290,13 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                         <span className="w-[3px] h-[3px] rounded-full bg-white opacity-75 mt-0.5"></span>
                                     </div>
                                     <span className="text-xl font-extrabold text-white tracking-widest font-sans">
-                                        PYDAH
+                                        CAMPO
                                     </span>
                                 </div>
                             </div>
                             {/* Subtitle */}
-                            <span className="text-[10px] text-sky-200 mt-2 font-serif italic tracking-wider whitespace-nowrap">
-                                Education & Beyond
+                            <span className="text-[10px] mt-2 font-medium tracking-wider whitespace-nowrap" style={{ color: sidebarMuted }}>
+                                Fee Management
                             </span>
                         </div>
                     )}
@@ -309,25 +321,26 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                 </button>
             </div>
             
-            {/* Main Nav Container: White bg overlapping the header slightly with rounded corners */}
+            {/* Main Nav Container: Theme sidebar background */}
             <nav 
                 ref={navRef} 
                 onScroll={handleScroll} 
-                className="sidebar-nav-scroll flex-1 min-h-0 overflow-y-auto bg-white rounded-t-[24px] -mt-5 pt-6 px-3 pb-3 space-y-3 relative z-10"
+                className="sidebar-nav-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-3 relative z-10"
+                style={{ backgroundColor: 'transparent', color: sidebarText }}
             >
                 {Object.entries(groupedItems).map(([section, items], sGroupIdx) => (
                     <div key={section} className="space-y-1">
                         {!isCollapsed && section !== 'Overview' && (
                             <div className="mb-1.5 mt-2 flex items-center justify-center px-2">
-                                <div className="flex-1 h-[1px] bg-gray-100"></div>
-                                <div className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest px-3.5">
+                                <div className="flex-1 h-[1px]" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
+                                <div className="text-[9px] font-extrabold uppercase tracking-widest px-3.5" style={{ color: sidebarMuted }}>
                                     {section}
                                 </div>
-                                <div className="flex-1 h-[1px] bg-gray-100"></div>
+                                <div className="flex-1 h-[1px]" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
                             </div>
                         )}
                         {isCollapsed && sGroupIdx > 0 && (
-                            <div className="h-[1px] bg-gray-100 my-2 mx-2"></div>
+                            <div className="h-[1px] my-2 mx-2" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
                         )}
                         <div className="space-y-0.5">
                             {(Array.isArray(items) ? items : []).map((item, index) => {
@@ -345,12 +358,16 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-100'
-                                                        : 'text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                        ? 'text-white shadow-md'
+                                                        : 'hover:bg-white/10'
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
+                                                style={isActive 
+                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
+                                                    : { color: sidebarText }
+                                                }
                                                 title={isCollapsed ? 'Fee Configuration' : ''}
                                             >
-                                                <span className={`text-xl shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Fee Configuration</span>
@@ -360,20 +377,24 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && feeConfigExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l border-indigo-100 space-y-0.5">
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
                                                     {FEE_CONFIG_SUB_ITEMS.map(sub => {
                                                         const subActive = isFeeConfigActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'heads'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/fee-config#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
                                                                     subActive
-                                                                        ? 'bg-blue-50 text-blue-700 font-bold'
-                                                                        : 'text-slate-500 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                                        ? 'font-bold'
+                                                                        : ''
                                                                 }`}
+                                                                style={subActive 
+                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
+                                                                    : { color: sidebarMuted }
+                                                                }
                                                             >
-                                                                <span className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${subActive ? 'bg-blue-600' : 'bg-slate-300'}`}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -399,16 +420,20 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-100'
-                                                        : 'text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                        ? 'text-white shadow-md'
+                                                        : 'hover:bg-white/10'
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
+                                                style={isActive 
+                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
+                                                    : { color: sidebarText }
+                                                }
                                                 title={isCollapsed ? 'Proceedings' : ''}
                                             >
-                                                <span className={`relative text-xl shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`}>
+                                                <span className="relative text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>
                                                     {item.icon}
                                                     {hasPendingProceedingTxns && isCollapsed && (
                                                         <span
-                                                            className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isActive ? 'bg-amber-300 ring-2 ring-indigo-600' : 'bg-amber-500 ring-2 ring-white'}`}
+                                                            className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isActive ? 'bg-amber-300 ring-2 ring-[var(--primary)]' : 'bg-amber-500 ring-2 ring-white'}`}
                                                             title="Pending proceeding transactions"
                                                         />
                                                     )}
@@ -429,7 +454,7 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 )}
                                             </button>
                                             {!isCollapsed && proceedingsExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l border-indigo-100 space-y-0.5">
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
                                                     {visibleProceedingsSubs.map(sub => {
                                                         const isAnalyticsSub = sub.hash === 'analytics';
                                                         const targetTo = isAnalyticsSub ? '/proceedings-analytics' : `/proceedings#${sub.hash}`;
@@ -440,13 +465,17 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={targetTo}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
                                                                     subActive
-                                                                        ? 'bg-blue-50 text-blue-700 font-bold'
-                                                                        : 'text-slate-500 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                                        ? 'font-bold'
+                                                                        : ''
                                                                 }`}
+                                                                style={subActive 
+                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
+                                                                    : { color: sidebarMuted }
+                                                                }
                                                             >
-                                                                <span className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${subActive ? 'bg-blue-600' : 'bg-slate-300'}`}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -471,12 +500,16 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-100'
-                                                        : 'text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                        ? 'text-white shadow-md'
+                                                        : 'hover:bg-white/10'
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
+                                                style={isActive 
+                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
+                                                    : { color: sidebarText }
+                                                }
                                                 title={isCollapsed ? 'Reminder Config' : ''}
                                             >
-                                                <span className={`text-xl shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Reminder Config</span>
@@ -486,20 +519,24 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && reminderConfigExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l border-indigo-100 space-y-0.5">
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
                                                     {REMINDER_CONFIG_SUB_ITEMS.map(sub => {
                                                         const subActive = isReminderConfigActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'templates'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/reminders#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
                                                                     subActive
-                                                                        ? 'bg-blue-50 text-blue-700 font-bold'
-                                                                        : 'text-slate-500 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                                        ? 'font-bold'
+                                                                        : ''
                                                                 }`}
+                                                                style={subActive 
+                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
+                                                                    : { color: sidebarMuted }
+                                                                }
                                                             >
-                                                                <span className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${subActive ? 'bg-blue-600' : 'bg-slate-300'}`}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -524,12 +561,16 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-100'
-                                                        : 'text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                        ? 'text-white shadow-md'
+                                                        : 'hover:bg-white/10'
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
+                                                style={isActive 
+                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
+                                                    : { color: sidebarText }
+                                                }
                                                 title={isCollapsed ? 'Settings' : ''}
                                             >
-                                                <span className={`text-xl shrink-0 ${isActive ? 'text-white' : 'text-slate-500'}`}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Settings</span>
@@ -539,20 +580,24 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && settingsExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l border-indigo-100 space-y-0.5">
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
                                                     {SETTINGS_SUB_ITEMS.map(sub => {
                                                         const subActive = isSettingsActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'appearance'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/settings#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
                                                                     subActive
-                                                                        ? 'bg-blue-50 text-blue-700 font-bold'
-                                                                        : 'text-slate-500 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                                        ? 'font-bold'
+                                                                        : ''
                                                                 }`}
+                                                                style={subActive 
+                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
+                                                                    : { color: sidebarMuted }
+                                                                }
                                                             >
-                                                                <span className={`w-1.5 h-1.5 rounded-full mr-2 shrink-0 ${subActive ? 'bg-blue-600' : 'bg-slate-300'}`}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -572,14 +617,18 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                         onClick={onCloseMobile}
                                         className={`sidebar-link flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                             isActive
-                                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md shadow-indigo-100'
-                                                : 'text-slate-700 hover:bg-indigo-50/50 hover:text-indigo-600'
+                                                ? 'text-white shadow-md'
+                                                : 'hover:bg-white/10'
                                         } ${isCollapsed ? 'justify-center' : ''}`}
+                                        style={isActive 
+                                            ? { backgroundColor: primaryColor, color: '#ffffff' } 
+                                            : { color: sidebarText }
+                                        }
                                         title={isCollapsed ? item.name : ''}
                                     >
-                                        <span className={`text-xl shrink-0 transition-colors duration-200 ${
-                                            isActive ? 'text-white' : 'text-slate-500 group-hover:text-indigo-600'
-                                        }`}>{item.icon}</span>
+                                        <span className="text-xl shrink-0 transition-colors duration-200" style={{
+                                            color: isActive ? '#ffffff' : sidebarMuted
+                                        }}>{item.icon}</span>
                                         {!isCollapsed && <span className="ml-3.5 whitespace-nowrap">{item.name}</span>}
                                     </Link>
                                 );
@@ -591,24 +640,27 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
 
 
             {/* Bottom Section: Profile Card */}
-            <div className="p-3 border-t border-gray-100 shrink-0 bg-white">
+            <div className="p-3 border-t shrink-0" style={{ backgroundColor: 'transparent', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
                 <div className={`flex ${isCollapsed ? 'flex-col items-center gap-2.5' : 'items-center justify-between'}`}>
                     
                     {/* User Info / Profile Card Link */}
                     <Link 
                         to="/user-profile"
-                        className={`flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200 hover:bg-slate-50 border border-transparent hover:border-slate-100/80 ${
+                        className={`flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200 hover:bg-white/10 border border-transparent ${
                             isCollapsed ? 'justify-center w-full' : 'flex-1 min-w-0 mr-1'
                         }`}
                         title="View Profile"
                     >
-                        <div className="w-8.5 h-8.5 rounded-full bg-indigo-600 flex items-center justify-center text-white font-extrabold text-[12px] shadow-sm shrink-0 transition-transform duration-200 hover:scale-105">
+                        <div 
+                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center text-white font-extrabold text-[12px] shadow-sm shrink-0 transition-transform duration-200 hover:scale-105"
+                            style={{ backgroundColor: primaryColor }}
+                        >
                             {user.name ? user.name.slice(0, 2).toUpperCase() : 'SA'}
                         </div>
                         {!isCollapsed && (
                             <div className="flex-1 min-w-0 text-left">
-                                <p className="text-xs font-bold text-slate-800 leading-tight truncate">{user.name || 'Super Admin'}</p>
-                                <p className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5 truncate">
+                                <p className="text-xs font-bold leading-tight truncate" style={{ color: sidebarText }}>{user.name || 'Super Admin'}</p>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mt-0.5 truncate" style={{ color: sidebarMuted }}>
                                     {role === 'superadmin' 
                                         ? 'Super Admin' 
                                         : (user.campuses && user.campuses.length > 0
@@ -651,7 +703,8 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                 }
                             });
                         }}
-                        className="text-slate-400 hover:text-red-500 transition-colors p-2.5 rounded-xl hover:bg-red-50 shrink-0"
+                        className="transition-colors p-2.5 rounded-xl hover:bg-red-500/10 hover:text-red-400 shrink-0"
+                        style={{ color: sidebarMuted }}
                         title="Logout"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>

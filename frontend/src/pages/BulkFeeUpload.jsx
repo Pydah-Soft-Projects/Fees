@@ -287,7 +287,7 @@ const BulkFeeUpload = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
                 <header className="mb-6">

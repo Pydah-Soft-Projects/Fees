@@ -1850,7 +1850,7 @@ const DueReports = () => {
     }, [filteredData, maxTerms]);
 
     return (
-        <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+        <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
 
             <div className="flex-1 flex flex-col h-full overflow-hidden">

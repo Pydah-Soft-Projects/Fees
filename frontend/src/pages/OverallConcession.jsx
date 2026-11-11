@@ -1671,7 +1671,7 @@ const OverallConcession = () => {
     // ── access denied screen ─────────────────────────────────────────────
     if (!hasPageAccess) {
         return (
-            <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+            <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
                 <Sidebar />
                 <div className="flex-1 flex items-center justify-center p-6">
                     <div className="bg-white p-8 rounded-3xl shadow-xl border border-red-100 max-w-md w-full text-center">
@@ -2063,7 +2063,7 @@ const OverallConcession = () => {
     // RENDER
     // ════════════════════════════════════════════════════════════════════
     return (
-        <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+        <div className="flex h-screen font-sans overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 flex flex-col h-full overflow-hidden">
                 <main className="flex-1 overflow-y-auto p-6 scrollbar-thin">

@@ -43,21 +43,21 @@ const UserProfile = () => {
     };
 
     return (
-        <div className="flex min-h-screen bg-gray-50 font-sans">
+        <div className="flex min-h-screen font-sans" style={{ backgroundColor: 'var(--background)', color: 'var(--text-primary)' }}>
             <Sidebar />
             <div className="flex-1 p-8 overflow-y-auto max-h-screen">
                 <header className="mb-8 max-w-6xl mx-auto">
-                    <h1 className="text-3xl font-extrabold text-gray-800 tracking-tight">My Profile</h1>
-                    <p className="text-gray-500 mt-2">Manage your account details and security settings.</p>
+                    <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>My Profile</h1>
+                    <p className="mt-2" style={{ color: 'var(--text-secondary)' }}>Manage your account details and security settings.</p>
                 </header>
 
                 {/* Main Profile Card - Large & Centered */}
-                <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
-                    <div className="h-32 bg-gradient-to-r from-blue-600 to-blue-800"></div>
+                <div className="max-w-6xl mx-auto rounded-2xl shadow-xl overflow-hidden border" style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}>
+                    <div className="h-32" style={{ background: 'var(--sidebar)' }}></div>
                     <div className="px-8 pb-8 relative">
                         <div className="absolute -top-16 left-8">
-                            <div className="w-32 h-32 bg-white rounded-full p-1 shadow-lg">
-                                <div className="w-full h-full bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-5xl font-bold">
+                            <div className="w-32 h-32 rounded-full p-1 shadow-lg" style={{ backgroundColor: 'var(--surface)' }}>
+                                <div className="w-full h-full rounded-full flex items-center justify-center text-5xl font-bold" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
                                     {user.name ? user.name.charAt(0).toUpperCase() : 'U'}
                                 </div>
                             </div>
