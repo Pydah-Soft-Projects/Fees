@@ -260,6 +260,34 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
         return acc;
     }, {});
 
+    const handleLogout = () => {
+        const isSSO = localStorage.getItem('isSSO') === 'true';
+        const crmUrl = localStorage.getItem('crmReturnUrl') || import.meta.env.VITE_CRM_FRONTEND_URL || 'http://localhost:5173';
+
+        Swal.fire({
+            title: 'Are you sure?',
+            text: isSSO
+                ? 'Are you sure you want to log out? You will be redirected to the CRM portal.'
+                : 'Are you sure you want to log out? You will be returned to the login screen.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: 'var(--primary)',
+            cancelButtonColor: 'var(--sidebar-muted)',
+            confirmButtonText: 'Yes, logout!',
+            cancelButtonText: 'Cancel'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                clearAuthSession();
+
+                if (isSSO) {
+                    window.location.href = crmUrl;
+                } else {
+                    window.location.href = '/login';
+                }
+            }
+        });
+    };
+
     return (
         <>
             {/* Mobile Backdrop Overlay */}
@@ -648,78 +676,77 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
             </nav>
 
 
-            {/* Bottom Section: Profile Card */}
-            <div className="p-3 border-t shrink-0" style={{ backgroundColor: 'transparent', borderColor: 'var(--border)' }}>
-                <div className={`flex ${isCollapsed ? 'flex-col items-center gap-2.5' : 'items-center justify-between'}`}>
-                    
-                    {/* User Info / Profile Card Link */}
-                    <Link 
-                        to="/user-profile"
-                        className={`sidebar-profile-link flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200 border ${
-                            isCollapsed ? 'justify-center w-full' : 'flex-1 min-w-0 mr-1'
-                        }`}
-                        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
-                        title="View Profile"
+            {/* Bottom Section: Profile Card matching Image 2 */}
+            <div className="p-3 border-t shrink-0" style={{ backgroundColor: 'transparent', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                {isCollapsed ? (
+                    <div 
+                        className="flex flex-col items-center gap-2.5 p-2 rounded-2xl transition-all duration-200"
+                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }}
                     >
-                        <div 
-                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center font-extrabold text-[12px] shadow-sm shrink-0 transition-transform duration-200 hover:scale-105"
-                            style={{ backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }}
+                        <Link 
+                            to="/user-profile"
+                            className="w-9 h-9 rounded-full bg-white flex items-center justify-center font-bold text-sm shadow-sm transition-transform duration-200 hover:scale-105 shrink-0"
+                            style={{ color: 'var(--primary)' }}
+                            title={user.name || 'User Profile'}
                         >
-                            {user.name ? user.name.slice(0, 2).toUpperCase() : 'SA'}
-                        </div>
-                        {!isCollapsed && (
+                            {user.name ? user.name.trim().charAt(0).toUpperCase() : 'S'}
+                        </Link>
+                        <button
+                            onClick={handleLogout}
+                            className="p-1.5 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                            title="Logout"
+                        >
+                            <LogOut className="w-5 h-5 text-white" />
+                        </button>
+                    </div>
+                ) : (
+                    <div 
+                        className="flex items-center justify-between p-2.5 rounded-2xl transition-all duration-200"
+                        style={{ backgroundColor: 'rgba(255, 255, 255, 0.06)' }}
+                    >
+                        <Link 
+                            to="/user-profile"
+                            className="flex items-center gap-3 flex-1 min-w-0 mr-1.5 group"
+                            title="View Profile"
+                        >
+                            {/* White Circle Avatar with Primary Letter */}
+                            <div 
+                                className="w-9 h-9 rounded-full bg-white flex items-center justify-center font-bold text-sm shadow-sm shrink-0 transition-transform duration-200 group-hover:scale-105"
+                                style={{ color: 'var(--primary)' }}
+                            >
+                                {user.name ? user.name.trim().charAt(0).toUpperCase() : 'S'}
+                            </div>
+
+                            {/* User Name & Role */}
                             <div className="flex-1 min-w-0 text-left">
-                                <p className="text-xs font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{user.name || 'Super Admin'}</p>
-                                <p className="text-[9px] font-semibold uppercase tracking-wider mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>
+                                <p className="text-sm font-bold text-white leading-tight truncate">
+                                    {user.name || 'System Superadmin'}
+                                </p>
+                                <p className="text-xs text-slate-400 mt-0.5 truncate font-normal">
                                     {role === 'superadmin' 
-                                        ? 'Super Admin' 
+                                        ? 'Superadmin' 
                                         : (user.campuses && user.campuses.length > 0
                                             ? `Campus scope (${user.campuses.length})`
                                             : (user.colleges && user.colleges.length > 1 
                                                 ? `${user.college} (+${user.colleges.length - 1})` 
-                                                : (user.college || role)
+                                                : (user.college || role || 'User')
                                               )
                                           )
                                     }
                                 </p>
                             </div>
-                        )}
-                    </Link>
-                    <button
-                        onClick={() => {
-                            const isSSO = localStorage.getItem('isSSO') === 'true';
-                            const crmUrl = localStorage.getItem('crmReturnUrl') || import.meta.env.VITE_CRM_FRONTEND_URL || 'http://localhost:5173';
+                        </Link>
 
-                            Swal.fire({
-                                title: 'Are you sure?',
-                                text: isSSO
-                                    ? 'Are you sure you want to log out? You will be redirected to the CRM portal.'
-                                    : 'Are you sure you want to log out? You will be returned to the login screen.',
-                                icon: 'warning',
-                                showCancelButton: true,
-                                confirmButtonColor: 'var(--primary)',
-                                cancelButtonColor: 'var(--sidebar-muted)',
-                                confirmButtonText: 'Yes, logout!',
-                                cancelButtonText: 'Cancel'
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    clearAuthSession();
-
-                                    if (isSSO) {
-                                        window.location.href = crmUrl;
-                                    } else {
-                                        window.location.href = '/login';
-                                    }
-                                }
-                            });
-                        }}
-                        className="sidebar-logout-button transition-colors p-2.5 rounded-xl shrink-0"
-                        style={{ color: 'var(--sidebar-muted)' }}
-                        title="Logout"
-                    >
-                        <LogOut className="w-5 h-5" />
-                    </button>
-                </div>
+                        {/* Logout Button */}
+                        <button
+                            onClick={handleLogout}
+                            className="p-1.5 rounded-lg text-white/90 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+                            title="Logout"
+                        >
+                            <LogOut className="w-5 h-5 text-white" />
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Sidebar Micro-Animations */}
