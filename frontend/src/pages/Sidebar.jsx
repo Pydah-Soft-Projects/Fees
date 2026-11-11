@@ -1,20 +1,35 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Swal from 'sweetalert2';
+import {
+    BadgeCheck,
+    Bell,
+    CalendarDays,
+    ChartNoAxesColumn,
+    ChevronDown,
+    ChevronLeft,
+    ChevronRight,
+    CircleDollarSign,
+    CreditCard,
+    FileText,
+    GraduationCap,
+    LayoutDashboard,
+    LogOut,
+    Settings,
+    ShieldCheck,
+    Tag,
+    TriangleAlert,
+    Upload,
+    UserRound,
+    UsersRound,
+    Wallet,
+    X
+} from 'lucide-react';
 import { getStoredUser, clearAuthSession } from '../lib/auth';
 import api from '../lib/api';
-import useThemeTokens from '../hooks/useThemeTokens';
 
 const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
     const location = useLocation();
-    const themeTokens = useThemeTokens();
-    const sidebarBg = themeTokens.sidebar || 'var(--sidebar, var(--primary))';
-    const sidebarText = themeTokens.sidebarText || 'var(--sidebar-text, #ffffff)';
-    const sidebarMuted = themeTokens.sidebarMuted || 'var(--sidebar-muted, rgba(255, 255, 255, 0.7))';
-    const primaryColor = themeTokens.primary || 'var(--primary)';
-    const primaryLight = themeTokens.primaryLight || 'var(--primary-light, rgba(255, 255, 255, 0.15))';
-    const borderColor = themeTokens.border || 'var(--border, rgba(255, 255, 255, 0.1))';
-
     const [isCollapsed, setIsCollapsed] = useState(() => {
         return localStorage.getItem('sidebar-collapsed') === 'true';
     });
@@ -46,19 +61,19 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
     };
 
     const icons = {
-        Dashboard: <svg className="w-5 h-5 icon-dashboard transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>,
-        Config: <svg className="w-5 h-5 icon-config transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>,
-        Students: <svg className="w-5 h-5 icon-students transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
-        Collection: <svg className="w-5 h-5 icon-collection transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>,
-        Reports: <svg className="w-5 h-5 icon-reports transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" /></svg>,
-        DueReports: <svg className="w-5 h-5 icon-duereports transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>,
-        Users: <svg className="w-5 h-5 icon-users transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>,
-        PaymentConfig: <svg className="w-5 h-5 icon-paymentconfig transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>,
-        Reminders: <svg className="w-5 h-5 icon-reminders transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>,
-        BulkUpload: <svg className="w-5 h-5 icon-bulkupload transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>,
-        Concession: <svg className="w-5 h-5 icon-concession transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581a1.5 1.5 0 002.122 0l4.317-4.317a1.5 1.5 0 000-2.122L11.159 3.659A1.5 1.5 0 009.568 3z" /><path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" /></svg>,
-        ConcessionApproval: <svg className="w-5 h-5 icon-concessionapproval transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-        Calendar: <svg className="w-5 h-5 icon-calendar transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+        Dashboard: <LayoutDashboard className="w-5 h-5 icon-dashboard transition-transform duration-200" />,
+        Config: <Settings className="w-5 h-5 icon-config transition-transform duration-200" />,
+        Students: <GraduationCap className="w-5 h-5 icon-students transition-transform duration-200" />,
+        Collection: <Wallet className="w-5 h-5 icon-collection transition-transform duration-200" />,
+        Reports: <ChartNoAxesColumn className="w-5 h-5 icon-reports transition-transform duration-200" />,
+        DueReports: <TriangleAlert className="w-5 h-5 icon-duereports transition-transform duration-200" />,
+        Users: <UsersRound className="w-5 h-5 icon-users transition-transform duration-200" />,
+        PaymentConfig: <CreditCard className="w-5 h-5 icon-paymentconfig transition-transform duration-200" />,
+        Reminders: <Bell className="w-5 h-5 icon-reminders transition-transform duration-200" />,
+        BulkUpload: <Upload className="w-5 h-5 icon-bulkupload transition-transform duration-200" />,
+        Concession: <Tag className="w-5 h-5 icon-concession transition-transform duration-200" />,
+        ConcessionApproval: <BadgeCheck className="w-5 h-5 icon-concessionapproval transition-transform duration-200" />,
+        Calendar: <CalendarDays className="w-5 h-5 icon-calendar transition-transform duration-200" />
     };
 
     const user = getStoredUser() || {};
@@ -184,7 +199,7 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
         return canViewProceedings;
     });
 
-    const settingsIcon = <svg className="w-5 h-5 icon-settings transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>;
+    const settingsIcon = <Settings className="w-5 h-5 icon-settings transition-transform duration-200" />;
 
     // Define all available menu items grouped by section
     const allMenuItems = [
@@ -195,11 +210,11 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
         // Fee Operations
         { section: 'Fee Operations', name: 'Fee Collection', path: '/fee-collection', icon: icons.Collection },
         { section: 'Fee Operations', name: 'Transaction Date Changes', path: '/transaction-dates', icon: icons.Calendar },
-        { section: 'Fee Operations', name: 'Caution Deposit', path: '/caution-deposit', icon: <svg className="w-5 h-5 icon-collection transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+        { section: 'Fee Operations', name: 'Caution Deposit', path: '/caution-deposit', icon: <CircleDollarSign className="w-5 h-5 icon-collection transition-transform duration-200" /> },
         { section: 'Fee Operations', name: 'Concessions (Declaration)', path: '/overall-concessions', icon: icons.Concession },
         { section: 'Fee Operations', name: 'Concessions (Application)', path: '/concessions', icon: icons.ConcessionApproval },
         { section: 'Fee Operations', name: 'Bulk Fee Upload', path: '/bulk-fee-upload', icon: icons.BulkUpload },
-        { section: 'Fee Operations', name: '__PROCEEDINGS__', path: '/proceedings', icon: <svg className="w-5 h-5 icon-proceedings transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10l5 5v9a2 2 0 01-2 2z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 3v5h5" /></svg> },
+        { section: 'Fee Operations', name: '__PROCEEDINGS__', path: '/proceedings', icon: <FileText className="w-5 h-5 icon-proceedings transition-transform duration-200" /> },
 
         // Reports
         { section: 'Reports', name: 'Reports & Analytics', path: '/reports', icon: icons.Reports },
@@ -214,8 +229,8 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
 
         // Administration
         { section: 'Administration', name: 'User Management', path: '/user-management', icon: icons.Users },
-        { section: 'Administration', name: 'Permissions', path: '/permissions', icon: <svg className="w-5 h-5 icon-permissions transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg> },
-        { section: 'Administration', name: 'User Profile', path: '/user-profile', icon: <svg className="w-5 h-5 icon-userprofile transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg> },
+        { section: 'Administration', name: 'Permissions', path: '/permissions', icon: <ShieldCheck className="w-5 h-5 icon-permissions transition-transform duration-200" /> },
+        { section: 'Administration', name: 'User Profile', path: '/user-profile', icon: <UserRound className="w-5 h-5 icon-userprofile transition-transform duration-200" /> },
     ];
 
     // Filter Logic
@@ -250,63 +265,68 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
             {/* Mobile Backdrop Overlay */}
             {isOpenMobile && (
                 <div 
-                    className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+                    className="fixed inset-0 backdrop-blur-xs z-40 md:hidden transition-opacity duration-300"
+                    style={{ backgroundColor: 'color-mix(in srgb, var(--sidebar) 70%, transparent)' }}
                     onClick={onCloseMobile}
                 />
             )}
-            <div className={`h-screen max-h-screen flex flex-col shadow-lg transition-all duration-300 overflow-hidden shrink-0 
-                fixed inset-y-0 left-0 z-50 md:sticky md:top-0 md:z-auto
+            <div
+                aria-hidden="true"
+                className={`hidden md:block shrink-0 transition-all duration-300 ${isCollapsed ? 'w-20' : 'w-64'}`}
+            />
+            <aside className={`h-screen flex flex-col border-r transition-all duration-300 overflow-visible shrink-0
+                fixed top-0 left-0 bottom-0 z-50 md:z-40
                 ${isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-                ${isCollapsed ? 'w-64 md:w-20' : 'w-64 md:w-62'}
-            `} style={{ backgroundColor: sidebarBg, color: sidebarText, borderRight: `1px solid ${borderColor}` }}>
-            <div 
-                className="p-4 pt-4 pb-4 shrink-0 relative flex flex-col items-center border-b"
-                style={{ backgroundColor: sidebarBg, color: sidebarText, borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                ${isCollapsed ? 'w-64 md:w-20' : 'w-64'}
+            `} style={{
+                backgroundColor: 'var(--sidebar)',
+                color: 'var(--sidebar-text)',
+                borderColor: 'var(--border)',
+                fontFamily: "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif"
+            }}>
+            <div
+                className="shrink-0 relative flex flex-col items-center justify-center text-center pt-6 pb-4 border-b"
+                style={{ borderColor: 'var(--border)' }}
             >
                 <div
-                    className={`flex items-center gap-3 ${isCollapsed ? 'justify-center w-full cursor-pointer' : 'justify-center w-full'}`}
+                    className={`flex items-center justify-center w-full ${isCollapsed ? 'cursor-pointer' : ''}`}
                     onClick={() => isCollapsed && expandSidebar()}
-                    title={isCollapsed ? "Click to Expand" : ""}
+                    title={isCollapsed ? 'Click to Expand' : ''}
                 >
-                    {isCollapsed ? (
-                        /* Compact Campo Icon for Collapsed Sidebar */
+                    <div className="flex flex-col items-center justify-center select-none">
                         <img
-                            src="/campo-logos/favicon.svg"
+                            src="/campo-logos/campo_logo_transparent_hq.png"
                             alt="Campo"
-                            className="w-9 h-9 rounded-lg object-contain shrink-0 shadow-xs"
+                            className={`h-7 object-contain ${isCollapsed ? 'w-14' : 'w-auto max-w-[120px]'}`}
                         />
-                    ) : (
-                        /* Full Campo Brand Logo */
-                        <div className="flex flex-col items-center justify-center select-none">
-                            <img
-                                src="/campo-logos/campo_logo_transparent_hq.png"
-                                alt="Campo"
-                                className="h-9 w-auto max-w-[155px] object-contain"
-                            />
-                            {/* Subtitle */}
-                            <span className="text-[10px] mt-1.5 font-medium tracking-wider whitespace-nowrap" style={{ color: sidebarMuted }}>
+                        {!isCollapsed && (
+                            <span className="text-[10px] mt-1.5 font-medium tracking-wider whitespace-nowrap" style={{ color: 'var(--sidebar-muted)' }}>
                                 Fee Management
                             </span>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
 
-                {!isCollapsed && (
-                    <button
-                        onClick={toggleCollapsed}
-                        className="hidden md:block absolute top-4 right-4 p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
-                        title="Collapse Sidebar"
-                    >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
-                    </button>
-                )}
+                <button
+                    onClick={toggleCollapsed}
+                    className="hidden md:flex absolute -right-3 top-[106px] z-50 w-6 h-6 items-center justify-center rounded-full shadow-md border sidebar-collapse-button sidebar-utility-button"
+                    style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--sidebar-muted)' }}
+                    title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+                    aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                    {isCollapsed
+                        ? <ChevronRight size={14} strokeWidth={2.5} />
+                        : <ChevronLeft size={14} strokeWidth={2.5} />}
+                </button>
                 {/* Mobile Close Button */}
                 <button
                     onClick={onCloseMobile}
-                    className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                    className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg sidebar-utility-button"
+                    style={{ color: 'var(--sidebar-text)' }}
                     title="Close Menu"
+                    aria-label="Close menu"
                 >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                    <X size={20} strokeWidth={2.5} />
                 </button>
             </div>
             
@@ -315,21 +335,19 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                 ref={navRef} 
                 onScroll={handleScroll} 
                 className="sidebar-nav-scroll flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-3 relative z-10"
-                style={{ backgroundColor: 'transparent', color: sidebarText }}
+                style={{ backgroundColor: 'transparent', color: 'var(--sidebar-text)' }}
             >
                 {Object.entries(groupedItems).map(([section, items], sGroupIdx) => (
                     <div key={section} className="space-y-1">
-                        {!isCollapsed && section !== 'Overview' && (
-                            <div className="mb-1.5 mt-2 flex items-center justify-center px-2">
-                                <div className="flex-1 h-[1px]" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
-                                <div className="text-[9px] font-extrabold uppercase tracking-widest px-3.5" style={{ color: sidebarMuted }}>
-                                    {section}
+                        {!isCollapsed && (
+                            <div className="mb-1.5 mt-2 flex items-center px-2">
+                                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: 'var(--sidebar-muted)' }}>
+                                    {section === 'Overview' ? 'Main' : section}
                                 </div>
-                                <div className="flex-1 h-[1px]" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
                             </div>
                         )}
                         {isCollapsed && sGroupIdx > 0 && (
-                            <div className="h-[1px] my-2 mx-2" style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}></div>
+                            <div className="h-px my-2 mx-2" style={{ backgroundColor: 'var(--border)' }}></div>
                         )}
                         <div className="space-y-0.5">
                             {(Array.isArray(items) ? items : []).map((item, index) => {
@@ -347,43 +365,43 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'text-white shadow-md'
-                                                        : 'hover:bg-white/10'
+                                                        ? 'shadow-md'
+                                                        : ''
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
-                                                style={isActive 
-                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
-                                                    : { color: sidebarText }
+                                                style={isActive
+                                                    ? { backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }
+                                                    : { color: 'var(--sidebar-text)' }
                                                 }
                                                 title={isCollapsed ? 'Fee Configuration' : ''}
                                             >
-                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)' }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Fee Configuration</span>
-                                                        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${feeConfigExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${feeConfigExpanded ? 'rotate-180' : ''}`} strokeWidth={2.5} />
                                                     </>
                                                 )}
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && feeConfigExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'var(--border)' }}>
                                                     {FEE_CONFIG_SUB_ITEMS.map(sub => {
                                                         const subActive = isFeeConfigActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'heads'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/fee-config#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
+                                                                className={`sidebar-sub-link flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                                                     subActive
                                                                         ? 'font-bold'
                                                                         : ''
                                                                 }`}
                                                                 style={subActive 
-                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
-                                                                    : { color: sidebarMuted }
+                                                                    ? { backgroundColor: 'color-mix(in srgb, var(--sidebar-text) 15%, transparent)', color: 'var(--sidebar-text)' }
+                                                                    : { color: 'var(--sidebar-muted)' }
                                                                 }
                                                             >
-                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? 'var(--primary-light)' : 'var(--sidebar-muted)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -409,20 +427,21 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'text-white shadow-md'
-                                                        : 'hover:bg-white/10'
+                                                        ? 'shadow-md'
+                                                        : ''
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
                                                 style={isActive 
-                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
-                                                    : { color: sidebarText }
+                                                    ? { backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }
+                                                    : { color: 'var(--sidebar-text)' }
                                                 }
                                                 title={isCollapsed ? 'Proceedings' : ''}
                                             >
-                                                <span className="relative text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>
+                                                <span className="relative text-xl shrink-0" style={{ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)' }}>
                                                     {item.icon}
                                                     {hasPendingProceedingTxns && isCollapsed && (
                                                         <span
-                                                            className={`absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ${isActive ? 'bg-amber-300 ring-2 ring-[var(--primary)]' : 'bg-amber-500 ring-2 ring-white'}`}
+                                                            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full ring-2"
+                                                            style={{ backgroundColor: 'var(--primary-light)', '--tw-ring-color': isActive ? 'var(--primary)' : 'var(--sidebar)' }}
                                                             title="Pending proceeding transactions"
                                                         />
                                                     )}
@@ -433,17 +452,18 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                             Proceedings
                                                             {hasPendingProceedingTxns && (
                                                                 <span
-                                                                    className={`w-2 h-2 rounded-full shrink-0 ${isActive ? 'bg-amber-300' : 'bg-amber-500'}`}
+                                                                    className="w-2 h-2 rounded-full shrink-0"
+                                                                    style={{ backgroundColor: 'var(--primary-light)' }}
                                                                     title="Pending proceeding transactions"
                                                                 />
                                                             )}
                                                         </span>
-                                                        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${proceedingsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${proceedingsExpanded ? 'rotate-180' : ''}`} strokeWidth={2.5} />
                                                     </>
                                                 )}
                                             </button>
                                             {!isCollapsed && proceedingsExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'var(--border)' }}>
                                                     {visibleProceedingsSubs.map(sub => {
                                                         const isAnalyticsSub = sub.hash === 'analytics';
                                                         const targetTo = isAnalyticsSub ? '/proceedings-analytics' : `/proceedings#${sub.hash}`;
@@ -454,17 +474,17 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={targetTo}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
+                                                                className={`sidebar-sub-link flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                                                     subActive
                                                                         ? 'font-bold'
                                                                         : ''
                                                                 }`}
                                                                 style={subActive 
-                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
-                                                                    : { color: sidebarMuted }
+                                                                    ? { backgroundColor: 'color-mix(in srgb, var(--sidebar-text) 15%, transparent)', color: 'var(--sidebar-text)' }
+                                                                    : { color: 'var(--sidebar-muted)' }
                                                                 }
                                                             >
-                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? 'var(--primary-light)' : 'var(--sidebar-muted)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -489,43 +509,43 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'text-white shadow-md'
-                                                        : 'hover:bg-white/10'
+                                                        ? 'shadow-md'
+                                                        : ''
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
                                                 style={isActive 
-                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
-                                                    : { color: sidebarText }
+                                                    ? { backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }
+                                                    : { color: 'var(--sidebar-text)' }
                                                 }
                                                 title={isCollapsed ? 'Reminder Config' : ''}
                                             >
-                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)' }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Reminder Config</span>
-                                                        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${reminderConfigExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${reminderConfigExpanded ? 'rotate-180' : ''}`} strokeWidth={2.5} />
                                                     </>
                                                 )}
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && reminderConfigExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'var(--border)' }}>
                                                     {REMINDER_CONFIG_SUB_ITEMS.map(sub => {
                                                         const subActive = isReminderConfigActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'templates'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/reminders#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
+                                                                className={`sidebar-sub-link flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                                                     subActive
                                                                         ? 'font-bold'
                                                                         : ''
                                                                 }`}
                                                                 style={subActive 
-                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
-                                                                    : { color: sidebarMuted }
+                                                                    ? { backgroundColor: 'color-mix(in srgb, var(--sidebar-text) 15%, transparent)', color: 'var(--sidebar-text)' }
+                                                                    : { color: 'var(--sidebar-muted)' }
                                                                 }
                                                             >
-                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? 'var(--primary-light)' : 'var(--sidebar-muted)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -550,43 +570,43 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                                 }}
                                                 className={`sidebar-link w-full flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                                     isActive
-                                                        ? 'text-white shadow-md'
-                                                        : 'hover:bg-white/10'
+                                                        ? 'shadow-md'
+                                                        : ''
                                                 } ${isCollapsed ? 'justify-center' : ''}`}
                                                 style={isActive 
-                                                    ? { backgroundColor: primaryColor, color: '#ffffff' } 
-                                                    : { color: sidebarText }
+                                                    ? { backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }
+                                                    : { color: 'var(--sidebar-text)' }
                                                 }
                                                 title={isCollapsed ? 'Settings' : ''}
                                             >
-                                                <span className="text-xl shrink-0" style={{ color: isActive ? '#ffffff' : sidebarMuted }}>{item.icon}</span>
+                                                <span className="text-xl shrink-0" style={{ color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)' }}>{item.icon}</span>
                                                 {!isCollapsed && (
                                                     <>
                                                         <span className="ml-3.5 whitespace-nowrap flex-1 text-left">Settings</span>
-                                                        <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${settingsExpanded ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${settingsExpanded ? 'rotate-180' : ''}`} strokeWidth={2.5} />
                                                     </>
                                                 )}
                                             </button>
                                             {/* Sub-items */}
                                             {!isCollapsed && settingsExpanded && (
-                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'rgba(255, 255, 255, 0.15)' }}>
+                                                <div className="ml-3 mt-0.5 pl-3 border-l space-y-0.5" style={{ borderColor: 'var(--border)' }}>
                                                     {SETTINGS_SUB_ITEMS.map(sub => {
                                                         const subActive = isSettingsActive && (location.hash === `#${sub.hash}` || (!location.hash && sub.hash === 'appearance'));
                                                         return (
                                                             <Link
                                                                 key={sub.hash}
                                                                 to={`/settings#${sub.hash}`}
-                                                                className={`flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:bg-white/10 ${
+                                                                className={`sidebar-sub-link flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                                                     subActive
                                                                         ? 'font-bold'
                                                                         : ''
                                                                 }`}
                                                                 style={subActive 
-                                                                    ? { backgroundColor: 'rgba(255, 255, 255, 0.15)', color: sidebarText } 
-                                                                    : { color: sidebarMuted }
+                                                                    ? { backgroundColor: 'color-mix(in srgb, var(--sidebar-text) 15%, transparent)', color: 'var(--sidebar-text)' }
+                                                                    : { color: 'var(--sidebar-muted)' }
                                                                 }
                                                             >
-                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? (primaryLight !== 'var(--primary-light)' ? primaryLight : '#ffffff') : 'rgba(255, 255, 255, 0.3)' }}></span>
+                                                                <span className="w-1.5 h-1.5 rounded-full mr-2 shrink-0" style={{ backgroundColor: subActive ? 'var(--primary-light)' : 'var(--sidebar-muted)' }}></span>
                                                                 {sub.name}
                                                             </Link>
                                                         );
@@ -606,17 +626,17 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                         onClick={onCloseMobile}
                                         className={`sidebar-link flex items-center px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                                             isActive
-                                                ? 'text-white shadow-md'
-                                                : 'hover:bg-white/10'
+                                                ? 'shadow-md'
+                                                : ''
                                         } ${isCollapsed ? 'justify-center' : ''}`}
-                                        style={isActive 
-                                            ? { backgroundColor: primaryColor, color: '#ffffff' } 
-                                            : { color: sidebarText }
+                                        style={isActive
+                                            ? { backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }
+                                            : { color: 'var(--sidebar-text)' }
                                         }
                                         title={isCollapsed ? item.name : ''}
                                     >
                                         <span className="text-xl shrink-0 transition-colors duration-200" style={{
-                                            color: isActive ? '#ffffff' : sidebarMuted
+                                            color: isActive ? 'var(--sidebar-text)' : 'var(--sidebar-muted)'
                                         }}>{item.icon}</span>
                                         {!isCollapsed && <span className="ml-3.5 whitespace-nowrap">{item.name}</span>}
                                     </Link>
@@ -629,27 +649,28 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
 
 
             {/* Bottom Section: Profile Card */}
-            <div className="p-3 border-t shrink-0" style={{ backgroundColor: 'transparent', borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+            <div className="p-3 border-t shrink-0" style={{ backgroundColor: 'transparent', borderColor: 'var(--border)' }}>
                 <div className={`flex ${isCollapsed ? 'flex-col items-center gap-2.5' : 'items-center justify-between'}`}>
                     
                     {/* User Info / Profile Card Link */}
                     <Link 
                         to="/user-profile"
-                        className={`flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200 hover:bg-white/10 border border-transparent ${
+                        className={`sidebar-profile-link flex items-center gap-2 p-1.5 rounded-xl transition-all duration-200 border ${
                             isCollapsed ? 'justify-center w-full' : 'flex-1 min-w-0 mr-1'
                         }`}
+                        style={{ backgroundColor: 'var(--surface)', borderColor: 'var(--border)' }}
                         title="View Profile"
                     >
                         <div 
-                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center text-white font-extrabold text-[12px] shadow-sm shrink-0 transition-transform duration-200 hover:scale-105"
-                            style={{ backgroundColor: primaryColor }}
+                            className="w-8.5 h-8.5 rounded-full flex items-center justify-center font-extrabold text-[12px] shadow-sm shrink-0 transition-transform duration-200 hover:scale-105"
+                            style={{ backgroundColor: 'var(--primary)', color: 'var(--sidebar-text)' }}
                         >
                             {user.name ? user.name.slice(0, 2).toUpperCase() : 'SA'}
                         </div>
                         {!isCollapsed && (
                             <div className="flex-1 min-w-0 text-left">
-                                <p className="text-xs font-bold leading-tight truncate" style={{ color: sidebarText }}>{user.name || 'Super Admin'}</p>
-                                <p className="text-[9px] font-semibold uppercase tracking-wider mt-0.5 truncate" style={{ color: sidebarMuted }}>
+                                <p className="text-xs font-bold leading-tight truncate" style={{ color: 'var(--text-primary)' }}>{user.name || 'Super Admin'}</p>
+                                <p className="text-[9px] font-semibold uppercase tracking-wider mt-0.5 truncate" style={{ color: 'var(--text-secondary)' }}>
                                     {role === 'superadmin' 
                                         ? 'Super Admin' 
                                         : (user.campuses && user.campuses.length > 0
@@ -676,8 +697,8 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                     : 'Are you sure you want to log out? You will be returned to the login screen.',
                                 icon: 'warning',
                                 showCancelButton: true,
-                                confirmButtonColor: '#d33',
-                                cancelButtonColor: '#3085d6',
+                                confirmButtonColor: 'var(--primary)',
+                                cancelButtonColor: 'var(--sidebar-muted)',
                                 confirmButtonText: 'Yes, logout!',
                                 cancelButtonText: 'Cancel'
                             }).then((result) => {
@@ -692,17 +713,31 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                                 }
                             });
                         }}
-                        className="transition-colors p-2.5 rounded-xl hover:bg-red-500/10 hover:text-red-400 shrink-0"
-                        style={{ color: sidebarMuted }}
+                        className="sidebar-logout-button transition-colors p-2.5 rounded-xl shrink-0"
+                        style={{ color: 'var(--sidebar-muted)' }}
                         title="Logout"
                     >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        <LogOut className="w-5 h-5" />
                     </button>
                 </div>
             </div>
 
             {/* Sidebar Micro-Animations */}
             <style>{`
+                .sidebar-link:hover {
+                    background-color: color-mix(in srgb, var(--sidebar-text) 10%, transparent);
+                }
+                .sidebar-sub-link:hover,
+                .sidebar-utility-button:hover {
+                    background-color: color-mix(in srgb, var(--sidebar-text) 10%, transparent);
+                }
+                .sidebar-profile-link:hover {
+                    filter: brightness(0.96);
+                }
+                .sidebar-logout-button:hover {
+                    background-color: color-mix(in srgb, var(--primary-light) 25%, transparent);
+                    color: var(--sidebar-text);
+                }
                 .sidebar-link:hover .icon-dashboard {
                     animation: dashboard-pulse 1s infinite alternate ease-in-out;
                 }
@@ -784,10 +819,9 @@ const Sidebar = ({ isOpenMobile = false, onCloseMobile = () => {} }) => {
                     100% { transform: scale(1.1) translateY(-2px); }
                 }
             `}</style>
-        </div>
+        </aside>
         </>
     );
 };
 
 export default Sidebar;
-

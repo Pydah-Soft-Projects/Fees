@@ -172,10 +172,10 @@ button {
 }
 
 
-/* Sidebar scrollbar – matches page (white/gray/blue) */
+/* Sidebar scrollbar follows the active theme */
 .sidebar-nav-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 #f1f5f9;
+  scrollbar-color: var(--sidebar-muted) var(--sidebar);
 }
 
 .sidebar-nav-scroll::-webkit-scrollbar {
@@ -183,17 +183,17 @@ button {
 }
 
 .sidebar-nav-scroll::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: var(--sidebar);
   border-radius: 3px;
 }
 
 .sidebar-nav-scroll::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: var(--sidebar-muted);
   border-radius: 3px;
 }
 
 .sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: var(--sidebar-text);
 }
 
 .animate-fade-in-up {
