@@ -8,6 +8,18 @@ const CSP_POLICY = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsaf
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/auth': {
+        target: 'http://localhost:5000/api',
+        changeOrigin: true,
+        secure: false,
+      }
+    },
     headers: {
       'Content-Security-Policy': CSP_POLICY,
       'X-Frame-Options': 'SAMEORIGIN',

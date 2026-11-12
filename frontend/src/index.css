@@ -173,27 +173,31 @@ button {
 
 
 /* Sidebar scrollbar follows the active theme */
-.sidebar-nav-scroll {
+.sidebar-nav-scroll,
+.custom-dark-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: var(--sidebar-muted) var(--sidebar);
+  scrollbar-color: var(--border) transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar {
-  width: 6px;
+.sidebar-nav-scroll::-webkit-scrollbar,
+.custom-dark-scrollbar::-webkit-scrollbar {
+  width: 5px;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-track {
-  background: var(--sidebar);
-  border-radius: 3px;
+.sidebar-nav-scroll::-webkit-scrollbar-track,
+.custom-dark-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.sidebar-nav-scroll::-webkit-scrollbar-thumb {
+.sidebar-nav-scroll::-webkit-scrollbar-thumb,
+.custom-dark-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+
+.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover,
+.custom-dark-scrollbar::-webkit-scrollbar-thumb:hover {
   background: var(--sidebar-muted);
-  border-radius: 3px;
-}
-
-.sidebar-nav-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--sidebar-text);
 }
 
 .animate-fade-in-up {

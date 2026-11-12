@@ -97,6 +97,7 @@ const { authorize } = require('./middleware/authorizeMiddleware');
 
 // Public auth routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/auth', require('./routes/authRoutes'));
 
 // Public sync routes (protected by sync secret, not user JWT)
 app.use('/api/sync', require('./routes/syncRoutes'));
