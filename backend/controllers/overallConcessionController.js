@@ -1,5 +1,6 @@
 const db = require('../config/sqlDb');
 const admissionsDb = require('../config/admissionsDb');
+const { connectTransportDB, getTransportConnection } = require('../config/dbTransport');
 const StudentFee = require('../models/StudentFee');
 const FeeHead = require('../models/FeeHead');
 const FeeStructure = require('../models/FeeStructure');
@@ -169,6 +170,117 @@ const getOverallConcessions = async (req, res) => {
                 };
             });
         });
+
+        // 3b. Fetch transport original fees for these students (if approved transport requests or demands exist)
+        const trnHead = feeHeads.find(h =>
+            (h.code && ['TRN01', 'TRN'].includes(h.code.trim().toUpperCase())) ||
+            /transport/i.test(h.name)
+        );
+        if (trnHead) {
+            const trnHeadId = trnHead._id.toString();
+            const trnHeadCode = trnHead.code || 'TRN01';
+            const trnHeadName = trnHead.name || 'Transport Fee';
+
+            const studentAdmNos = students.map(s => s.admission_number).filter(Boolean);
+            const studentAdmKeyMap = new Map();
+            students.forEach(s => {
+                const key = String(s.admission_number || '').trim().toUpperCase();
+                studentAdmKeyMap.set(key, s);
+            });
+
+            const transportFaresMap = {}; // admKey -> { [studentYear]: amount }
+
+            // A. Check StudentFee for existing transport demands
+            try {
+                const sfList = await StudentFee.find({
+                    studentId: { $in: studentAdmNos },
+                    feeHead: trnHead._id
+                }).lean();
+
+                sfList.forEach(sf => {
+                    const key = String(sf.studentId || '').trim().toUpperCase();
+                    const yr = Number(sf.studentYear);
+                    const amt = Number(sf.amount) || 0;
+                    if (yr > 0 && amt > 0) {
+                        if (!transportFaresMap[key]) transportFaresMap[key] = {};
+                        transportFaresMap[key][yr] = amt;
+                    }
+                });
+            } catch (sfErr) {
+                console.error('Error fetching StudentFee for transport in getOverallConcessions:', sfErr.message);
+            }
+
+            // B. Check approved requests in dbTransport.transport_requests
+            try {
+                const tConn = getTransportConnection() || await connectTransportDB();
+                if (tConn && tConn.readyState === 1) {
+                    const trList = await tConn.db.collection('transport_requests').find({
+                        admission_number: { $in: studentAdmNos },
+                        status: { $regex: /^approved$/i }
+                    }).toArray();
+
+                    trList.forEach(tr => {
+                        const key = String(tr.admission_number || '').trim().toUpperCase();
+                        const s = studentAdmKeyMap.get(key);
+                        let yr = tr.year_of_study !== undefined && tr.year_of_study !== null
+                            ? Number(tr.year_of_study)
+                            : (tr.yearOfStudy !== undefined && tr.yearOfStudy !== null ? Number(tr.yearOfStudy) : null);
+
+                        if (!yr || isNaN(yr) || yr <= 0) {
+                            const batchYear = parseInt(String(s?.batch || '').split('-')[0], 10);
+                            const reqAy = String(tr.academicYear || tr.academic_year || '').trim();
+                            const ayMatch = reqAy.match(/^(\d{4})/);
+                            if (!isNaN(batchYear) && ayMatch) {
+                                const ayStart = parseInt(ayMatch[1], 10);
+                                const diff = ayStart - batchYear + 1;
+                                if (diff >= 1 && diff <= 10) yr = diff;
+                            }
+                        }
+                        if (!yr || isNaN(yr) || yr <= 0) {
+                            yr = Number(s?.current_year) || 1;
+                        }
+
+                        const fare = Number(tr.fare !== undefined ? tr.fare : tr.amount) || 0;
+                        if (yr > 0 && fare > 0) {
+                            if (!transportFaresMap[key]) transportFaresMap[key] = {};
+                            if (!transportFaresMap[key][yr]) {
+                                transportFaresMap[key][yr] = fare;
+                            }
+                        }
+                    });
+                }
+            } catch (tErr) {
+                console.error('Error fetching dbTransport requests in getOverallConcessions:', tErr.message);
+            }
+
+            // Attach resolved transport standard fees to each student's standardFeesMap
+            students.forEach(s => {
+                const adm = s.admission_number;
+                const key = String(adm || '').trim().toUpperCase();
+                const faresByYear = transportFaresMap[key];
+                if (faresByYear) {
+                    if (!standardFeesMap[adm]) {
+                        standardFeesMap[adm] = [];
+                    }
+                    Object.entries(faresByYear).forEach(([yr, amt]) => {
+                        const yrNum = Number(yr);
+                        const exists = standardFeesMap[adm].some(
+                            sf => sf.feeHeadId === trnHeadId && Number(sf.studentYear) === yrNum
+                        );
+                        if (!exists && amt > 0) {
+                            standardFeesMap[adm].push({
+                                feeHeadId: trnHeadId,
+                                feeHeadCode: trnHeadCode,
+                                feeHeadName: trnHeadName,
+                                studentYear: yrNum,
+                                semester: null,
+                                amount: amt
+                            });
+                        }
+                    });
+                }
+            });
+        }
 
         // 4. Fetch merit status records for these students
         const meritMap = {};
