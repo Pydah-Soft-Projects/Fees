@@ -478,8 +478,73 @@ const getStudentFeeDetails = async (req, res) => {
     const resolveTxnGroupKey = (headId, year, feeCode, remarks, semester) => {
       const exactKey = getGroupKey(headId, year, feeCode, remarks, semester);
 
-      // Club / transport keep their specialized keys — no cross-semester merge
-      if (feeCode === 'CF' || feeCode === 'SSF' || feeCode === 'TRN' || feeCode === 'TRN01') {
+      // Club fees (CF) and Student Services fees (SSF):
+      // Match by exact key if exists; otherwise match existing demand by Ref ID, remarks prefix, or service name
+      if (feeCode === 'CF' || feeCode === 'SSF') {
+        if (groupedData[exactKey]) return exactKey;
+
+        const semKey = semester ? `S${semester}` : 'Y';
+        const yearPrefix = `${headId}-${year}-`;
+        const sameSemCandidates = Object.keys(groupedData).filter((k) => k.startsWith(`${yearPrefix}${semKey}-`));
+        const allCandidates = Object.keys(groupedData).filter((k) => k.startsWith(yearPrefix));
+        const candidateKeys = sameSemCandidates.length > 0 ? sameSemCandidates : allCandidates;
+
+        const txnRefMatch = String(remarks || '').match(/\(Ref:\s*([^)]+)\)/i);
+        const txnRef = txnRefMatch ? txnRefMatch[1].trim() : null;
+
+        // 1. Match by Ref ID (e.g. Ref: 1)
+        if (txnRef) {
+          for (const candKey of candidateKeys) {
+            const candRemarks = String(groupedData[candKey].remarks || '');
+            const candRefMatch = candRemarks.match(/\(Ref:\s*([^)]+)\)/i);
+            if (candRefMatch && candRefMatch[1].trim() === txnRef) {
+              return candKey;
+            }
+          }
+        }
+
+        // 2. Match by prefix / composite remarks (e.g. demand was "TC (Ref: 1)" and txn was "TC (Ref: 1) - custom note")
+        for (const candKey of candidateKeys) {
+          const candRemarks = String(groupedData[candKey].remarks || '').trim();
+          if (!candRemarks) continue;
+          const remarksList = groupedData[candKey].remarksList || [candRemarks];
+          for (const r of remarksList) {
+            const trimmedR = String(r).trim();
+            if (!trimmedR) continue;
+            if (
+              String(remarks).startsWith(`${trimmedR} - `) ||
+              trimmedR.startsWith(`${String(remarks).trim()} - `) ||
+              String(remarks).trim() === trimmedR
+            ) {
+              return candKey;
+            }
+          }
+        }
+
+        // 3. Match by cleaned service name (e.g. both refer to "TC")
+        const txnFormatted = formatServiceFeeName('', remarks);
+        if (txnFormatted) {
+          for (const candKey of candidateKeys) {
+            const candRemarks = String(groupedData[candKey].remarks || '');
+            if (candRemarks && formatServiceFeeName('', candRemarks) === txnFormatted) {
+              return candKey;
+            }
+          }
+        }
+
+        // 4. If there's only one candidate demand row with demand amount > 0 for this head & year, attach to it
+        const withDemand = candidateKeys
+          .map((k) => ({ k, amt: Number(groupedData[k].totalAmount) || 0 }))
+          .filter((x) => x.amt > 0);
+        if (withDemand.length === 1) {
+          return withDemand[0].k;
+        }
+
+        return exactKey;
+      }
+
+      // Transport keeps its specialized keys — no cross-semester merge
+      if (feeCode === 'TRN' || feeCode === 'TRN01') {
         return exactKey;
       }
 
@@ -497,10 +562,17 @@ const getStudentFeeDetails = async (req, res) => {
     };
 
     const formatServiceFeeName = (headName, remarks) => {
-      if (!remarks) return headName;
-      // Clean "Service Request: Name (Ref: 123)" -> "Name"
-      let name = remarks.replace(/^Service Request:\s*/i, '').replace(/\s*\(Ref:.*?\)\s*$/i, '');
-      return `${headName} - ${name.trim()}`;
+      if (!remarks) return headName || '';
+      // Clean "Service Request: Name (Ref: 123)" or "Service Request: Name (Ref: 123) - custom note" -> "Name"
+      let name = remarks
+        .replace(/^Service Request:\s*/i, '')
+        .replace(/\s*\(Ref:.*?\)/i, '');
+      const dashIdx = name.indexOf(' - ');
+      if (dashIdx !== -1) {
+        name = name.slice(0, dashIdx);
+      }
+      const trimmed = name.trim();
+      return headName ? `${headName} - ${trimmed}` : trimmed;
     };
 
     // A. Initialize with actual Demands
@@ -635,6 +707,10 @@ const getStudentFeeDetails = async (req, res) => {
             groupedData[key].totalAmount += (t.amount || 0);
           } else {
             groupedData[key].paidAmount += (t.amount || 0);
+          }
+          if (t.remarks && groupedData[key].remarksList && !groupedData[key].remarksList.includes(t.remarks)) {
+            groupedData[key].remarksList.push(t.remarks);
+            groupedData[key].remarks = groupedData[key].remarksList.join('\n');
           }
         } else if (t.transactionType === 'CREDIT') {
           const amt = t.amount || 0;

@@ -1897,6 +1897,19 @@ const buildDueReportData = async (queryParams = {}, user) => {
             const groupedData = {};
             const allYearsGroupedData = {};
 
+            const formatServiceFeeName = (headName, remarks) => {
+                if (!remarks) return headName || '';
+                let name = remarks
+                    .replace(/^Service Request:\s*/i, '')
+                    .replace(/\s*\(Ref:.*?\)/i, '');
+                const dashIdx = name.indexOf(' - ');
+                if (dashIdx !== -1) {
+                    name = name.slice(0, dashIdx);
+                }
+                const trimmed = name.trim();
+                return headName ? `${headName} - ${trimmed}` : trimmed;
+            };
+
             const getGroupKey = (headId, year, feeCode, remarks, semester) => {
                 const semKey = semester ? `S${semester}` : 'Y';
                 if (feeCode === 'CF' || feeCode === 'SSF') {
@@ -1910,7 +1923,73 @@ const buildDueReportData = async (queryParams = {}, user) => {
 
             const resolveTxnGroupKey = (targetMap, headId, year, feeCode, remarks, semester) => {
                 const exactKey = getGroupKey(headId, year, feeCode, remarks, semester);
-                if (feeCode === 'CF' || feeCode === 'SSF' || feeCode === 'TRN' || feeCode === 'TRN01') {
+
+                // Club fees (CF) and Student Services fees (SSF):
+                // Match by exact key if exists; otherwise match existing demand by Ref ID, remarks prefix, or service name
+                if (feeCode === 'CF' || feeCode === 'SSF') {
+                    if (targetMap[exactKey]) return exactKey;
+
+                    const semKey = semester ? `S${semester}` : 'Y';
+                    const yearPrefix = `${headId}-${year}-`;
+                    const sameSemCandidates = Object.keys(targetMap).filter((k) => k.startsWith(`${yearPrefix}${semKey}-`));
+                    const allCandidates = Object.keys(targetMap).filter((k) => k.startsWith(yearPrefix));
+                    const candidateKeys = sameSemCandidates.length > 0 ? sameSemCandidates : allCandidates;
+
+                    const txnRefMatch = String(remarks || '').match(/\(Ref:\s*([^)]+)\)/i);
+                    const txnRef = txnRefMatch ? txnRefMatch[1].trim() : null;
+
+                    // 1. Match by Ref ID (e.g. Ref: 1)
+                    if (txnRef) {
+                        for (const candKey of candidateKeys) {
+                            const candRemarks = String(targetMap[candKey].remarks || '');
+                            const candRefMatch = candRemarks.match(/\(Ref:\s*([^)]+)\)/i);
+                            if (candRefMatch && candRefMatch[1].trim() === txnRef) {
+                                return candKey;
+                            }
+                        }
+                    }
+
+                    // 2. Match by prefix / composite remarks
+                    for (const candKey of candidateKeys) {
+                        const candRemarks = String(targetMap[candKey].remarks || '').trim();
+                        if (!candRemarks) continue;
+                        const remarksList = targetMap[candKey].remarksList || [candRemarks];
+                        for (const r of remarksList) {
+                            const trimmedR = String(r).trim();
+                            if (!trimmedR) continue;
+                            if (
+                                String(remarks).startsWith(`${trimmedR} - `) ||
+                                trimmedR.startsWith(`${String(remarks).trim()} - `) ||
+                                String(remarks).trim() === trimmedR
+                            ) {
+                                return candKey;
+                            }
+                        }
+                    }
+
+                    // 3. Match by cleaned service name
+                    const txnFormatted = formatServiceFeeName('', remarks);
+                    if (txnFormatted) {
+                        for (const candKey of candidateKeys) {
+                            const candRemarks = String(targetMap[candKey].remarks || '');
+                            if (candRemarks && formatServiceFeeName('', candRemarks) === txnFormatted) {
+                                return candKey;
+                            }
+                        }
+                    }
+
+                    // 4. If single candidate with demand > 0
+                    const withDemand = candidateKeys
+                        .map((k) => ({ k, amt: Number(targetMap[k].totalAmount) || 0 }))
+                        .filter((x) => x.amt > 0);
+                    if (withDemand.length === 1) {
+                        return withDemand[0].k;
+                    }
+
+                    return exactKey;
+                }
+
+                if (feeCode === 'TRN' || feeCode === 'TRN01') {
                     return exactKey;
                 }
                 const yearPrefix = `${headId}-${year}-`;
@@ -1934,14 +2013,16 @@ const buildDueReportData = async (queryParams = {}, user) => {
                     allYearsGroupedData[key] = {
                         feeHeadId: fee.feeHead ? fee.feeHead._id : null,
                         feeHeadName: (fee.feeHead && (fee.feeHead.code === 'CF' || fee.feeHead.code === 'SSF')) 
-                            ? (fee.remarks ? `${fee.feeHead.name} - ${fee.remarks}` : fee.feeHead.name) 
+                            ? formatServiceFeeName(fee.feeHead.name, fee.remarks) 
                             : (fee.feeHead ? fee.feeHead.name : 'Unknown'),
                         feeHeadCode: fee.feeHead ? fee.feeHead.code : '',
                         studentYear: year,
                         totalAmount: 0,
                         concessionAmount: 0,
                         paidAmount: 0,
-                        dueAmount: 0
+                        dueAmount: 0,
+                        remarks: fee.remarks,
+                        remarksList: fee.remarks ? [fee.remarks] : []
                     };
                 }
                 allYearsGroupedData[key].totalAmount += (fee.amount || 0);
@@ -1958,14 +2039,16 @@ const buildDueReportData = async (queryParams = {}, user) => {
                         allYearsGroupedData[key] = {
                             feeHeadId: hId,
                             feeHeadName: (head && (head.code === 'CF' || head.code === 'SSF')) 
-                                ? (t.remarks ? `${head.name} - ${t.remarks}` : head.name) 
+                                ? formatServiceFeeName(head.name, t.remarks) 
                                 : (head ? head.name : 'Unknown'),
                             feeHeadCode: head ? head.code : '',
                             studentYear: year,
                             totalAmount: 0,
                             concessionAmount: 0,
                             paidAmount: 0,
-                            dueAmount: 0
+                            dueAmount: 0,
+                            remarks: t.remarks,
+                            remarksList: t.remarks ? [t.remarks] : []
                         };
                     }
                     if (t.transactionType === 'DEBIT') {
@@ -1996,7 +2079,7 @@ const buildDueReportData = async (queryParams = {}, user) => {
                     groupedData[key] = {
                         feeHeadId: fee.feeHead ? fee.feeHead._id : null,
                         feeHeadName: (fee.feeHead && (fee.feeHead.code === 'CF' || fee.feeHead.code === 'SSF')) 
-                            ? (fee.remarks ? `${fee.feeHead.name} - ${fee.remarks}` : fee.feeHead.name) 
+                            ? formatServiceFeeName(fee.feeHead.name, fee.remarks) 
                             : (fee.feeHead ? fee.feeHead.name : 'Unknown'),
                         feeHeadCode: fee.feeHead ? fee.feeHead.code : '',
                         academicYear: fee.academicYear || student.batch,
@@ -2009,6 +2092,8 @@ const buildDueReportData = async (queryParams = {}, user) => {
                         paidAmount: 0,
                         dueAmount: 0,
                         isActive: fee.isActive !== false,
+                        remarks: fee.remarks,
+                        remarksList: fee.remarks ? [fee.remarks] : [],
                         isTermsDivided: serviceTerms
                             ? serviceTerms.length > 1
                             : (fee.isTermsDivided !== undefined ? fee.isTermsDivided : (matchedStructure ? matchedStructure.isTermsDivided : false)),
@@ -2034,7 +2119,7 @@ const buildDueReportData = async (queryParams = {}, user) => {
                         groupedData[key] = {
                             feeHeadId: hId,
                             feeHeadName: (head && (head.code === 'CF' || head.code === 'SSF')) 
-                                ? (t.remarks ? `${head.name} - ${t.remarks}` : head.name) 
+                                ? formatServiceFeeName(head.name, t.remarks) 
                                 : (head ? head.name : 'Unknown'),
                             feeHeadCode: head ? head.code : '',
                             academicYear: student.batch,
@@ -2047,6 +2132,8 @@ const buildDueReportData = async (queryParams = {}, user) => {
                             paidAmount: 0,
                             dueAmount: 0,
                             isActive: true,
+                            remarks: t.remarks,
+                            remarksList: t.remarks ? [t.remarks] : [],
                             studentScholarStatus: getScholarshipStatus(student.id, year, t.semester) || 'not_eligible',
                             isScholarshipApplicable: matchedStructure?.isScholarshipApplicable || false,
                             terms: resolveEffectiveTerms(matchedStructure?.terms, matchedStructure?.amount || 0)

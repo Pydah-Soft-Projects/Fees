@@ -1337,14 +1337,18 @@ const FeeCollection = () => {
                         targetBank = rowBankAmount - excessBank;
                     }
 
+                    const baseFeeRemarks = (selectedFee && selectedFee.remarks)
+                        ? String(selectedFee.remarks).split('\n')[0].trim()
+                        : '';
+
                     const baseData = {
                         ...commonData,
                         feeHeadId: selectedFee ? selectedFee.feeHeadId : row.feeHeadId,
                         studentYear: selectedFee ? selectedFee.studentYear : commonData.studentYear,
                         semester: selectedFee ? selectedFee.semester : commonData.semester,
                         remarks: commonData.remarks
-                            ? ((selectedFee && selectedFee.remarks) ? `${selectedFee.remarks} - ${commonData.remarks}` : commonData.remarks)
-                            : ((selectedFee && selectedFee.remarks) ? selectedFee.remarks : '')
+                            ? (baseFeeRemarks ? `${baseFeeRemarks} - ${commonData.remarks}` : commonData.remarks)
+                            : baseFeeRemarks
                     };
 
                     const excessBaseData = (isExcess && excessFeeHeadId) ? {
@@ -1424,6 +1428,10 @@ const FeeCollection = () => {
                     const targetAmount = isExcess ? due : rowTotal;
                     const surplus = isExcess ? (rowTotal - due) : 0;
 
+                    const baseFeeRemarks = (selectedFee && selectedFee.remarks)
+                        ? String(selectedFee.remarks).split('\n')[0].trim()
+                        : '';
+
                     if (targetAmount > 0) {
                         batchTransactions.push({
                             ...commonData,
@@ -1432,8 +1440,8 @@ const FeeCollection = () => {
                             semester: selectedFee ? selectedFee.semester : commonData.semester,
                             amount: targetAmount,
                             remarks: commonData.remarks
-                                ? ((selectedFee && selectedFee.remarks) ? `${selectedFee.remarks} - ${commonData.remarks}` : commonData.remarks)
-                                : ((selectedFee && selectedFee.remarks) ? selectedFee.remarks : '')
+                                ? (baseFeeRemarks ? `${baseFeeRemarks} - ${commonData.remarks}` : commonData.remarks)
+                                : baseFeeRemarks
                         });
                     }
 
