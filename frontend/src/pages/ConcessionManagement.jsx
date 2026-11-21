@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import api from '../lib/api';
 import Swal from 'sweetalert2';
-import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, User, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag, BarChart3, ListFilter, Layers, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, User, ArrowUpDown, ArrowUp, ArrowDown, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag, BarChart3, ListFilter, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useReactToPrint } from 'react-to-print';
 import ConcessionReportPrint from '../components/ConcessionReportPrint';
@@ -200,6 +200,34 @@ const ConcessionManagement = () => {
         search: ''
     });
     const [raisedByList, setRaisedByList] = useState([]);
+    const [reqSortField, setReqSortField] = useState('createdAt'); // 'voucherId' | 'createdAt'
+    const [reqSortOrder, setReqSortOrder] = useState('desc'); // 'asc' | 'desc'
+
+    const formatDateDMY = (dateVal) => {
+        if (!dateVal) return '—';
+        const d = new Date(dateVal);
+        if (isNaN(d.getTime())) return '—';
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
+
+    const sortedPendingRequests = useMemo(() => {
+        return [...pendingRequests].sort((a, b) => {
+            if (reqSortField === 'voucherId') {
+                const vA = String(a.voucherId || '');
+                const vB = String(b.voucherId || '');
+                const cmp = vA.localeCompare(vB, undefined, { numeric: true, sensitivity: 'base' });
+                return reqSortOrder === 'asc' ? cmp : -cmp;
+            } else if (reqSortField === 'createdAt') {
+                const tA = new Date(a.createdAt || 0).getTime();
+                const tB = new Date(b.createdAt || 0).getTime();
+                return reqSortOrder === 'asc' ? tA - tB : tB - tA;
+            }
+            return 0;
+        });
+    }, [pendingRequests, reqSortField, reqSortOrder]);
 
     // Configurable Fee Heads & User History states
     const [settings, setSettings] = useState(null);
@@ -1964,8 +1992,48 @@ const ConcessionManagement = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-gray-50 border-b border-gray-200 text-[9.5px] uppercase tracking-widest text-gray-500 font-extrabold sticky top-0 z-10">
                                         <tr>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Voucher ID</th>
-                                            <th className="py-2.5 px-3 whitespace-nowrap">Requested Date</th>
+                                            <th
+                                                onClick={() => {
+                                                    if (reqSortField === 'voucherId') {
+                                                        setReqSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                                    } else {
+                                                        setReqSortField('voucherId');
+                                                        setReqSortOrder('asc');
+                                                    }
+                                                }}
+                                                className="py-2.5 px-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none transition"
+                                                title="Click to sort by Voucher ID"
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span>Voucher ID</span>
+                                                    {reqSortField === 'voucherId' ? (
+                                                        reqSortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-600 font-bold" /> : <ArrowDown size={11} className="text-blue-600 font-bold" />
+                                                    ) : (
+                                                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                                                    )}
+                                                </div>
+                                            </th>
+                                            <th
+                                                onClick={() => {
+                                                    if (reqSortField === 'createdAt') {
+                                                        setReqSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                                                    } else {
+                                                        setReqSortField('createdAt');
+                                                        setReqSortOrder('desc');
+                                                    }
+                                                }}
+                                                className="py-2.5 px-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 select-none transition"
+                                                title="Click to sort by Requested Date"
+                                            >
+                                                <div className="flex items-center gap-1.5">
+                                                    <span>Requested Date</span>
+                                                    {reqSortField === 'createdAt' ? (
+                                                        reqSortOrder === 'asc' ? <ArrowUp size={11} className="text-blue-600 font-bold" /> : <ArrowDown size={11} className="text-blue-600 font-bold" />
+                                                    ) : (
+                                                        <ArrowUpDown size={11} className="text-gray-400 opacity-60" />
+                                                    )}
+                                                </div>
+                                            </th>
                                             <th className="py-2.5 px-3 min-w-[160px]">Student Information</th>
                                             <th className="py-2.5 px-3 whitespace-nowrap">College / Course / Branch</th>
                                             <th className="py-2.5 px-3 whitespace-nowrap w-[130px]">Fee Head</th>
@@ -1976,7 +2044,7 @@ const ConcessionManagement = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="bg-white divide-y divide-gray-100 text-xs">
-                                        {pendingRequests.length === 0 ? (
+                                        {sortedPendingRequests.length === 0 ? (
                                             <tr>
                                                 <td colSpan="9" className="py-40 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
@@ -1989,7 +2057,7 @@ const ConcessionManagement = () => {
                                                 </td>
                                             </tr>
                                         ) : (
-                                            pendingRequests.map(group => (
+                                            sortedPendingRequests.map(group => (
                                                 <tr 
                                                     key={group.groupKey || group.requests[0]._id} 
                                                     onClick={() => openModal(group)}
@@ -2006,7 +2074,7 @@ const ConcessionManagement = () => {
                                                         </div>
                                                     </td>
                                                     <td className="py-2.5 px-3 whitespace-nowrap">
-                                                        <span className="text-[11px] font-bold text-gray-500">{new Date(group.createdAt).toLocaleDateString()}</span>
+                                                        <span className="text-[11px] font-bold text-gray-600">{formatDateDMY(group.createdAt)}</span>
                                                     </td>
                                                     <td className="py-2.5 px-3">
                                                         <div className="flex flex-col">
