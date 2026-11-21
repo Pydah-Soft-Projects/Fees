@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../lib/api';
 import Swal from 'sweetalert2';
-import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag, BarChart3, ListFilter, Layers, ChevronDown, ChevronRight } from 'lucide-react';
+import { Search, Upload, X, Check, Save, Calendar, Filter, Landmark, Users, User, Printer, Edit2, ShieldAlert, Menu, CheckCircle2, History, RefreshCw, Camera, FlipHorizontal, Eye, FileText, Lock, Image, ZoomIn, ZoomOut, RotateCw, Trash2, Tag, BarChart3, ListFilter, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import Sidebar from './Sidebar';
 import { useReactToPrint } from 'react-to-print';
 import ConcessionReportPrint from '../components/ConcessionReportPrint';
@@ -196,8 +196,10 @@ const ConcessionManagement = () => {
         course: '',
         branch: '',
         batch: '',
+        requestedBy: '',
         search: ''
     });
+    const [raisedByList, setRaisedByList] = useState([]);
 
     // Configurable Fee Heads & User History states
     const [settings, setSettings] = useState(null);
@@ -536,6 +538,7 @@ const ConcessionManagement = () => {
         }
         if (activeTab === 'approvals') {
             fetchPendingRequests();
+            fetchRaisedByList();
         }
         if (activeTab === 'approvers' || activeTab === 'reports') {
             fetchAllApprovers();
@@ -832,6 +835,7 @@ const ConcessionManagement = () => {
         if (!hasPermission) return;
         if (activeTab === 'approvals') {
             fetchPendingRequests();
+            fetchRaisedByList();
         }
     }, [activeTab, filters, hasPermission]); // Refetch when filters change
 
@@ -903,11 +907,29 @@ const ConcessionManagement = () => {
                 g.isBulk = g.requests.length > 1;
             });
 
+            if (Array.isArray(res.data)) {
+                const namesFromRes = res.data.map(r => r.requestedBy).filter(Boolean);
+                if (namesFromRes.length > 0) {
+                    setRaisedByList(prev => [...new Set([...prev, ...namesFromRes])].sort());
+                }
+            }
+
             setPendingRequests(grouped);
         } catch (error) {
             console.error(error);
         } finally {
             setApprovalLoading(false);
+        }
+    };
+
+    const fetchRaisedByList = async () => {
+        try {
+            const res = await api.get('/concessions/requested-by');
+            if (Array.isArray(res.data) && res.data.length > 0) {
+                setRaisedByList(prev => [...new Set([...prev, ...res.data])].sort());
+            }
+        } catch (e) {
+            console.error('Failed to load raised-by list', e);
         }
     };
 
@@ -1905,6 +1927,17 @@ const ConcessionManagement = () => {
                                         >
                                             <option value="">All Batches</option>
                                             {batchList.map(b => <option key={b} value={b}>{b}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-gray-200 shadow-2xs">
+                                        <User size={13} className="text-gray-400 shrink-0" />
+                                        <select
+                                            className="bg-transparent border-none p-0 text-xs font-semibold text-gray-700 focus:ring-0 cursor-pointer outline-none"
+                                            value={filters.requestedBy || ''}
+                                            onChange={e => setFilters({ ...filters, requestedBy: e.target.value })}
+                                        >
+                                            <option value="">All Raised By</option>
+                                            {raisedByList.map(name => <option key={name} value={name}>{name}</option>)}
                                         </select>
                                     </div>
                                     <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-gray-200 shadow-2xs focus-within:ring-2 focus-within:ring-blue-500 transition-all">

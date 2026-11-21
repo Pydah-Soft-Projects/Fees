@@ -121,7 +121,7 @@ const getConcessionRequests = async (req, res) => {
   if (batch) filter.batch = batch;
   if (studentId) filter.studentId = studentId;
   if (concessionGivenBy) filter.concessionGivenBy = concessionGivenBy;
-  if (requestedBy) filter.requestedBy = requestedBy;
+  if (requestedBy) filter.requestedBy = { $regex: new RegExp(`^${requestedBy.trim()}$`, 'i') };
 
   if (startDate || endDate) {
     filter.createdAt = {};
@@ -380,9 +380,24 @@ const updateConcessionRequest = async (req, res) => {
     }
 };
 
+const getDistinctRequestedBy = async (req, res) => {
+    try {
+        const users = await ConcessionRequest.distinct('requestedBy');
+        const cleaned = (users || [])
+            .filter(u => u && typeof u === 'string' && u.trim().length > 0)
+            .map(u => u.trim())
+            .sort();
+        res.json([...new Set(cleaned)]);
+    } catch (error) {
+        console.error('Error fetching distinct requestedBy:', error);
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
 module.exports = {
     createConcessionRequest,
     getConcessionRequests,
+    getDistinctRequestedBy,
     processConcessionRequest,
     processBulkConcessionRequests,
     getNextVoucherIdPreview,

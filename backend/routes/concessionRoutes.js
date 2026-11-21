@@ -3,6 +3,7 @@ const router = express.Router();
 const { 
   createConcessionRequest, 
   getConcessionRequests, 
+  getDistinctRequestedBy,
   processConcessionRequest, 
   processBulkConcessionRequests,
   getNextVoucherIdPreview,
@@ -17,6 +18,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 router.post('/', upload.single('image'), createConcessionRequest);
 router.get('/', getConcessionRequests);
 router.get('/next-voucher-id', getNextVoucherIdPreview);
+router.get('/requested-by', getDistinctRequestedBy);
 router.put('/bulk-process', processBulkConcessionRequests);
 router.put('/modify-approved/:id', modifyApprovedConcession);
 router.put('/:id/process', processConcessionRequest);
